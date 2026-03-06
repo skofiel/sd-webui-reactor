@@ -77,7 +77,7 @@ class BiSeNetMaskGenerator(MaskGenerator):
         for i in range(1, num_of_class + 1):
             index = np.where(face == i)
             if i < 14 and keep_face:
-                if exclude_mouth and i == 11:
+                if exclude_mouth and i in (11, 12, 13):
                     continue
                 mask[index[0], index[1], :] = [255, 255, 255]
             elif i == 14 and keep_neck:
@@ -87,17 +87,19 @@ class BiSeNetMaskGenerator(MaskGenerator):
             elif i == 18 and keep_hat:
                 mask[index[0], index[1], :] = [255, 255, 255]
 
-        # Dilatar la exclusión de boca para que sea efectiva tras el blur
+        # Dilate mouth exclusion so it survives the blur pass
         if exclude_mouth:
             mouth_region = np.zeros(face.shape[:2], dtype=np.uint8)
-            mouth_index = np.where(face == 11)
-            if len(mouth_index[0]) > 0:
-                mouth_region[mouth_index[0], mouth_index[1]] = 255
+            for cls in (11, 12, 13):  # upper lip, lower lip, inner mouth
+                idx = np.where(face == cls)
+                if len(idx[0]) > 0:
+                    mouth_region[idx[0], idx[1]] = 255
+            if mouth_region.any():
                 dilation_size = max(11, int(face.shape[0] * 0.03))
                 if dilation_size % 2 == 0:
                     dilation_size += 1
                 mouth_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilation_size, dilation_size))
-                mouth_region = cv2.dilate(mouth_region, mouth_kernel, iterations=2)
+                mouth_region = cv2.dilate(mouth_region, mouth_kernel, iterations=1)
                 mouth_exclude_idx = np.where(mouth_region > 0)
                 mask[mouth_exclude_idx[0], mouth_exclude_idx[1], :] = [0, 0, 0]
 
