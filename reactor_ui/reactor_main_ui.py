@@ -164,10 +164,12 @@ def show(is_img2img: bool, show_br: bool = True, **msgs):
             # imgs.upload(on_files_upload_uncheck_so,[save_original],[save_original],show_progress=False)
             # imgs.clear(on_files_clear,None,[save_original],show_progress=False)
             imgs.clear(clear_faces_list,None,None,show_progress=False)
-            mask_face = gr.Checkbox(
-                False,
+            mask_face = gr.Radio(
+                ["No", "Yes", "Extended"],
+                value="No",
                 label="Face Mask Correction",
-                info="Apply this option if you see some pixelation around face contours"
+                type="index",
+                info="'Yes' = standard mask correction; 'Extended' = adaptive blending with auto color correction and seamless clone"
             )
             mouth_mask = gr.Checkbox(
                 False,

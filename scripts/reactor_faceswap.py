@@ -264,7 +264,9 @@ class FaceSwapScript(scripts.Script):
             if self.target_hash_check is None:
                 self.target_hash_check = False
             if self.mask_face is None:
-                self.mask_face = False
+                self.mask_face = 0
+            if isinstance(self.mask_face, bool):
+                self.mask_face = 1 if self.mask_face else 0
             if self.mouth_mask is None:
                 self.mouth_mask = False
             if self.random_image is None:
@@ -660,7 +662,9 @@ class FaceSwapScriptExtras(scripts_postprocessing.ScriptPostprocessing):
             if len(self.faces_index) == 0:
                 self.faces_index = [0]
             if self.mask_face is None:
-                self.mask_face = False
+                self.mask_face = 0
+            if isinstance(self.mask_face, bool):
+                self.mask_face = 1 if self.mask_face else 0
             if self.mouth_mask is None:
                 self.mouth_mask = False
             if self.random_image is None:

@@ -65,6 +65,27 @@ class BiSeNetMaskGenerator(MaskGenerator):
        
         return mask
 
+    def get_raw_classes(
+        self,
+        face_image: np.ndarray,
+        face_area_on_image: Tuple[int, int, int, int],
+    ) -> np.ndarray:
+        """Return raw per-pixel class labels (0-18) from BiSeNet without masking."""
+        face_image = face_image.copy()[:, :, ::-1]
+        face_image = MaskGenerator.mask_non_face_areas(face_image, face_area_on_image)
+        h, w, _ = face_image.shape
+        if w != 512 or h != 512:
+            rw = (int(w * (512 / w)) // 8) * 8
+            rh = (int(h * (512 / h)) // 8) * 8
+            face_image = cv2.resize(face_image, dsize=(rw, rh))
+        face_tensor = img2tensor(face_image.astype("float32") / 255.0, float32=True)
+        normalize(face_tensor, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
+        face_tensor = torch.unsqueeze(face_tensor, 0).to(shared.device)
+        with torch.no_grad():
+            face = self.mask_model(face_tensor)[0]
+        face = face.squeeze(0).cpu().numpy().argmax(0)
+        return face.copy().astype(np.uint8)
+
     def __to_mask(self, face: np.ndarray, affected_areas: List[str]) -> np.ndarray:
         keep_face = "Face" in affected_areas
         keep_neck = "Neck" in affected_areas
@@ -77,7 +98,7 @@ class BiSeNetMaskGenerator(MaskGenerator):
         for i in range(1, num_of_class + 1):
             index = np.where(face == i)
             if i < 14 and keep_face:
-                if exclude_mouth and i in (11, 12, 13):
+                if exclude_mouth and i == 11:
                     continue
                 mask[index[0], index[1], :] = [255, 255, 255]
             elif i == 14 and keep_neck:
@@ -90,10 +111,9 @@ class BiSeNetMaskGenerator(MaskGenerator):
         # Dilate mouth exclusion so it survives the blur pass
         if exclude_mouth:
             mouth_region = np.zeros(face.shape[:2], dtype=np.uint8)
-            for cls in (11, 12, 13):  # upper lip, lower lip, inner mouth
-                idx = np.where(face == cls)
-                if len(idx[0]) > 0:
-                    mouth_region[idx[0], idx[1]] = 255
+            idx = np.where(face == 11)  # inner mouth only (not lips 12/13)
+            if len(idx[0]) > 0:
+                mouth_region[idx[0], idx[1]] = 255
             if mouth_region.any():
                 dilation_size = max(11, int(face.shape[0] * 0.03))
                 if dilation_size % 2 == 0:
