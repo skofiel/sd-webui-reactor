@@ -121,7 +121,7 @@ def reactor_api(_: gr.Blocks, app: FastAPI):
         save_to_file: int = Body(0,title="Save Result to file, 0 - No, 1 - Yes"),
         result_file_path: str = Body("",title="(if 'save_to_file = 1') Result file path"),
         device: str = Body("CPU",title="CPU or CUDA (if you have it)"),
-        mask_face: int = Body(0,title="Face Mask Correction, 1 - True, 0 - False"),
+        mask_face: int = Body(0,title="Face Mask Correction: 0 - No, 1 - Yes, 2 - Extended (adaptive blending)"),
         mouth_mask: int = Body(0,title="Mouth Mask, 1 - True, 0 - False"),
         select_source: int = Body(0,title="Select Source, 0 - Image, 1 - Face Model, 2 - Source Folder"),
         face_model: str = Body("None",title="Filename of the face model (from 'models/reactor/faces'), e.g. elena.safetensors"),
@@ -153,7 +153,7 @@ def reactor_api(_: gr.Blocks, app: FastAPI):
         gender_s = gender_source
         gender_t = gender_target
         restore_first_bool = True if restore_first == 1 else False
-        mask_face = True if mask_face == 1 else False
+        mask_face = max(0, min(2, mask_face))  # clamp to 0-2
         mouth_mask = True if mouth_mask == 1 else False
         random_image = False if random_image == 0 else True
         upscale_force = False if upscale_force == 0 else True

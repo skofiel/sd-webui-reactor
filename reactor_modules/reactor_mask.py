@@ -50,9 +50,91 @@ def process_face_image(
         return Image.fromarray(output)
 
 
-def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face,entire_mask_image:np.array,mouth_mask:bool=False)->np.ndarray:
-    logger.status("Correcting Face Mask")
-    mask_generator =  BiSeNetMaskGenerator()
+def _color_transfer(source: np.ndarray, target: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Transfer LAB color statistics from target face region to source (swapped) face region."""
+    mask_gray = mask if len(mask.shape) == 2 else cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+    mask_bool = mask_gray > 128
+    if mask_bool.sum() < 100:
+        return source
+    src_lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype(np.float32)
+    tgt_lab = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype(np.float32)
+    for ch in range(3):
+        s = src_lab[:, :, ch][mask_bool]
+        t = tgt_lab[:, :, ch][mask_bool]
+        s_mean, s_std = s.mean(), max(s.std(), 1e-6)
+        t_mean, t_std = t.mean(), max(t.std(), 1e-6)
+        src_lab[:, :, ch][mask_bool] = (s - s_mean) * (t_std / s_std) + t_mean
+    return cv2.cvtColor(np.clip(src_lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+
+
+def _analyze_scene(bisenet_classes: np.ndarray) -> dict:
+    """Analyze BiSeNet segmentation output to detect accessories and occlusions."""
+    total_face_pixels = np.sum((bisenet_classes >= 1) & (bisenet_classes <= 13))
+    has_glasses = np.sum(bisenet_classes == 6) > 50
+    has_hat = np.sum(bisenet_classes == 18) > 50
+    has_earring = np.sum(bisenet_classes == 9) > 20
+    skin_pixels = np.sum(bisenet_classes == 1)
+    occlusion_ratio = 1.0 - (skin_pixels / max(total_face_pixels, 1))
+    return {
+        "has_glasses": has_glasses,
+        "has_hat": has_hat,
+        "has_earring": has_earring,
+        "occlusion_ratio": occlusion_ratio,
+        "total_face_pixels": total_face_pixels,
+    }
+
+
+def _compute_edge_contrast(swapped: np.ndarray, target: np.ndarray, mask: np.ndarray) -> float:
+    """Measure color contrast at mask boundary to decide blending aggressiveness."""
+    mask_gray = mask if len(mask.shape) == 2 else cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+    # Create boundary band: dilate - erode
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    dilated = cv2.dilate(mask_gray, kernel, iterations=1)
+    eroded = cv2.erode(mask_gray, kernel, iterations=1)
+    boundary = ((dilated > 127) & (eroded < 128))
+    if boundary.sum() < 10:
+        return 0.0
+    diff = np.abs(swapped.astype(float) - target.astype(float))
+    if len(diff.shape) == 3:
+        diff = diff.mean(axis=2)
+    return float(diff[boundary].mean()) / 255.0
+
+
+def _compute_adaptive_params(scene: dict, edge_contrast: float, face_size: int) -> dict:
+    """Compute optimal mask parameters based on scene analysis."""
+    # Erosion: more with accessories to avoid halo
+    erosion = 0
+    if scene["has_glasses"]:
+        erosion = max(erosion, 3)
+    if scene["occlusion_ratio"] > 0.4:
+        erosion = max(erosion, 2)
+
+    # Blur kernel: larger when edge contrast is high
+    base_kernel = max(5, int(face_size * 0.03))
+    contrast_boost = int(edge_contrast * 10)
+    kernel_size = base_kernel + contrast_boost
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+
+    # Color correction: stronger when LAB distance is large
+    color_factor = min(1.0, edge_contrast * 3.0)
+    apply_color = color_factor > 0.15
+
+    # Seamless clone: use when contrast is noticeable and mask doesn't touch border
+    use_seamless = edge_contrast > 0.08
+
+    return {
+        "erosion": erosion,
+        "kernel_size": kernel_size,
+        "use_gaussian": True,
+        "apply_color": apply_color,
+        "use_seamless": use_seamless,
+    }
+
+
+def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face,entire_mask_image:np.array,mouth_mask:bool=False,mask_face_mode:int=1)->np.ndarray:
+    logger.status("Correcting Face Mask%s", " (Extended)" if mask_face_mode == 2 else "")
+    mask_generator = BiSeNetMaskGenerator()
     face = FaceArea(target_image,Rect.from_ndarray(np.array(target_face.bbox)),1.6,512,"")
     face_image = np.array(face.image)
     process_face_image(face)
@@ -68,19 +150,88 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
         use_minimal_area=True
     )
 
-    # Adaptive blur kernel: scale with face size instead of hardcoded (12,12)
     face_size = max(face.width, face.height)
-    kernel_size = max(5, int(face_size * 0.03))
-    mask = cv2.blur(mask, (kernel_size, kernel_size))
 
-    larger_mask = cv2.resize(mask, dsize=(face.width, face.height))
-    entire_mask_image[
-        face.top : face.bottom,
-        face.left : face.right,
-    ] = larger_mask
+    if mask_face_mode == 2:
+        # === EXTENDED MODE: adaptive auto-parameters ===
 
-    result = Image.composite(Image.fromarray(swapped_image),Image.fromarray(target_image), Image.fromarray(entire_mask_image).convert("L"))
-    return np.array(result)
+        # Get BiSeNet raw classes for scene analysis
+        bisenet_classes = mask_generator.get_raw_classes(face_image, face_area_on_image)
+        scene = _analyze_scene(bisenet_classes)
+        logger.info("Extended mask - scene: glasses=%s, hat=%s, occlusion=%.2f",
+                     scene["has_glasses"], scene["has_hat"], scene["occlusion_ratio"])
+
+        # Preliminary blur to compute edge contrast
+        k_pre = max(5, int(face_size * 0.03))
+        mask_pre = cv2.blur(mask.copy(), (k_pre, k_pre))
+        larger_mask_pre = cv2.resize(mask_pre, dsize=(face.width, face.height))
+        temp_mask = np.zeros_like(entire_mask_image)
+        temp_mask[face.top:face.bottom, face.left:face.right] = larger_mask_pre
+        edge_contrast = _compute_edge_contrast(swapped_image, target_image, temp_mask)
+
+        params = _compute_adaptive_params(scene, edge_contrast, face_size)
+        logger.info("Extended mask - params: erosion=%d, kernel=%d, gaussian=%s, color=%s, seamless=%s",
+                     params["erosion"], params["kernel_size"], params["use_gaussian"],
+                     params["apply_color"], params["use_seamless"])
+
+        # Apply erosion
+        if params["erosion"] > 0:
+            ek = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (params["erosion"], params["erosion"]))
+            mask = cv2.erode(mask, ek, iterations=1)
+
+        # Apply blur (Gaussian for Extended)
+        ks = params["kernel_size"]
+        if ks % 2 == 0:
+            ks += 1
+        mask = cv2.GaussianBlur(mask, (ks, ks), 0)
+
+        # Place mask in full image
+        larger_mask = cv2.resize(mask, dsize=(face.width, face.height))
+        entire_mask_image[face.top:face.bottom, face.left:face.right] = larger_mask
+
+        # Color correction
+        if params["apply_color"]:
+            swapped_image = _color_transfer(swapped_image, target_image, entire_mask_image)
+
+        # Blending: seamless clone with fallback
+        if params["use_seamless"]:
+            try:
+                mask_gray = entire_mask_image if len(entire_mask_image.shape) == 2 else cv2.cvtColor(entire_mask_image, cv2.COLOR_BGR2GRAY)
+                clone_mask = np.where(mask_gray > 127, 255, 0).astype(np.uint8)
+                bbox = target_face.bbox.astype(int)
+                h, w = target_image.shape[:2]
+                center = (
+                    int(np.clip((bbox[0] + bbox[2]) // 2, 1, w - 2)),
+                    int(np.clip((bbox[1] + bbox[3]) // 2, 1, h - 2)),
+                )
+                # Check mask doesn't touch image border (seamlessClone fails)
+                if (clone_mask[0, :].any() or clone_mask[-1, :].any() or
+                        clone_mask[:, 0].any() or clone_mask[:, -1].any()):
+                    logger.info("Extended mask - mask touches border, skipping seamlessClone")
+                else:
+                    result = cv2.seamlessClone(swapped_image, target_image, clone_mask, center, cv2.NORMAL_CLONE)
+                    return result
+            except cv2.error as e:
+                logger.warning("seamlessClone failed (%s), falling back to composite", e)
+
+        # Fallback: standard composite
+        result = Image.composite(
+            Image.fromarray(swapped_image), Image.fromarray(target_image),
+            Image.fromarray(entire_mask_image).convert("L"))
+        return np.array(result)
+
+    else:
+        # === STANDARD MODE (Yes): original behavior ===
+        kernel_size = max(5, int(face_size * 0.03))
+        mask = cv2.blur(mask, (kernel_size, kernel_size))
+
+        larger_mask = cv2.resize(mask, dsize=(face.width, face.height))
+        entire_mask_image[face.top:face.bottom, face.left:face.right] = larger_mask
+
+        result = Image.composite(
+            Image.fromarray(swapped_image), Image.fromarray(target_image),
+            Image.fromarray(entire_mask_image).convert("L"))
+        return np.array(result)
 
 
 def rotate_array(image: np.ndarray, angle: float) -> np.ndarray:

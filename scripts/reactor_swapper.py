@@ -367,7 +367,7 @@ def swap_face(
     source_hash_check: bool = True,
     target_hash_check: bool = False,
     device: str = "CPU",
-    mask_face: bool = False,
+    mask_face: int = 0,
     mouth_mask: bool = False,
     select_source: int = 0,
     face_model: str = "None",
@@ -387,6 +387,9 @@ def _swap_face_impl(
     target_hash_check, device, mask_face, mouth_mask, select_source, face_model,
     source_folder, source_imgs, random_image, detection_options,
 ):
+    # Normalize mask_face: bool (legacy) -> int
+    if isinstance(mask_face, bool):
+        mask_face = 1 if mask_face else 0
     global SOURCE_FACES, SOURCE_IMAGE_HASH, TARGET_FACES, TARGET_IMAGE_HASH, PROVIDERS, SOURCE_FACES_LIST, SOURCE_IMAGE_LIST_HASH
 
     result_image = target_img
@@ -801,7 +804,7 @@ def operate(
                 swapped_image = face_swapper.get(result, target_face, source_face)
                                         
                 if mask_face:
-                    result = apply_face_mask(swapped_image=swapped_image,target_image=result,target_face=target_face,entire_mask_image=entire_mask_image,mouth_mask=mouth_mask)
+                    result = apply_face_mask(swapped_image=swapped_image,target_image=result,target_face=target_face,entire_mask_image=entire_mask_image,mouth_mask=mouth_mask,mask_face_mode=mask_face)
                 else:
                     result = swapped_image
                 swapped += 1
