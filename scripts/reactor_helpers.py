@@ -244,18 +244,3 @@ def download(url, path, name):
         total = int(request.headers.get('Content-Length', 0))
     with tqdm(total=total, desc=f'[ReActor] Downloading {name} to {path}', unit='B', unit_scale=True, unit_divisor=1024) as progress:
         urllib.request.urlretrieve(url, path, reporthook=lambda count, block_size, total_size: progress.update(block_size))
-
-def check_nsfwdet_model(path: str):
-    if not os.path.exists(path):
-        print("Downloading `vit-base-nsfw-detector`, please wait...\n")
-        os.makedirs(path)
-        nd_urls = [
-            "https://huggingface.co/AdamCodd/vit-base-nsfw-detector/resolve/main/config.json",
-            "https://huggingface.co/AdamCodd/vit-base-nsfw-detector/resolve/main/confusion_matrix.png",
-            "https://huggingface.co/AdamCodd/vit-base-nsfw-detector/resolve/main/model.safetensors",
-            "https://huggingface.co/AdamCodd/vit-base-nsfw-detector/resolve/main/preprocessor_config.json",
-        ]
-        for model_url in nd_urls:
-            model_name = os.path.basename(model_url)
-            model_path = os.path.join(path, model_name)
-            download(model_url, model_path, model_name)
