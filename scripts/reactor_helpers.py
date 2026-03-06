@@ -242,5 +242,5 @@ def get_images_from_list(imgs: List):
 def download(url, path, name):
     with urllib.request.urlopen(url) as request:
         total = int(request.headers.get('Content-Length', 0))
-    with tqdm(total=total, desc=f'[ReActor] Downloading {name} to {path}', unit='B', unit_scale=True, unit_divisor=1024) as progress:
+    with tqdm(total=total, desc=f'[ReActor-X] Downloading {name} to {path}', unit='B', unit_scale=True, unit_divisor=1024) as progress:
         urllib.request.urlretrieve(url, path, reporthook=lambda count, block_size, total_size: progress.update(block_size))

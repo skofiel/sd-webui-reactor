@@ -50,17 +50,20 @@ def process_face_image(
         return Image.fromarray(output)
 
 
-def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face,entire_mask_image:np.array)->np.ndarray:
+def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face,entire_mask_image:np.array,mouth_mask:bool=False)->np.ndarray:
     logger.status("Correcting Face Mask")
     mask_generator =  BiSeNetMaskGenerator()
     face = FaceArea(target_image,Rect.from_ndarray(np.array(target_face.bbox)),1.6,512,"")
     face_image = np.array(face.image)
     process_face_image(face)
     face_area_on_image = face.face_area_on_image
+    affected_areas = ["Face"]
+    if mouth_mask:
+        affected_areas.append("MouthExclude")
     mask = mask_generator.generate_mask(
         face_image,
         face_area_on_image=face_area_on_image,
-        affected_areas=["Face"],
+        affected_areas=affected_areas,
         mask_size=0,
         use_minimal_area=True
     )

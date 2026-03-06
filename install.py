@@ -118,7 +118,7 @@ with open(req_file) as file:
             pip_install(ort, "-U")
     except Exception as e:
         print(e)
-        print(f"\nERROR: Failed to install {ort} - ReActor won't start")
+        print(f"\nERROR: Failed to install {ort} - ReActor-X won't start")
         raise e
     # print(f"Device: {last_device}")
     strict = True
@@ -136,7 +136,7 @@ with open(req_file) as file:
                 pip_install(package)
         except Exception as e:
             print(e)
-            print(f"\nERROR: Failed to install {package} - ReActor won't start")
+            print(f"\nERROR: Failed to install {package} - ReActor-X won't start")
             raise e
     if install_count > 0:
         print(f"""

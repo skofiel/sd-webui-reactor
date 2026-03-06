@@ -1,7 +1,7 @@
 '''
 Thanks SpenserCai for the original version of the roop api script
 -----------------------------------
---- ReActor External API v1.0.8a ---
+--- ReActor-X External API v1.0.8a ---
 -----------------------------------
 '''
 import os, glob
@@ -102,7 +102,7 @@ def get_full_model(model_name):
 
 def reactor_api(_: gr.Blocks, app: FastAPI):
     app.state.executor = ThreadPoolExecutor(max_workers=8)
-    @app.post("/reactor/image")
+    @app.post("/reactor-x/image")
     async def reactor_image(
         source_image: str = Body("",title="Source Face Image"),
         target_image: str = Body("",title="Target Image"),
@@ -122,6 +122,7 @@ def reactor_api(_: gr.Blocks, app: FastAPI):
         result_file_path: str = Body("",title="(if 'save_to_file = 1') Result file path"),
         device: str = Body("CPU",title="CPU or CUDA (if you have it)"),
         mask_face: int = Body(0,title="Face Mask Correction, 1 - True, 0 - False"),
+        mouth_mask: int = Body(0,title="Mouth Mask, 1 - True, 0 - False"),
         select_source: int = Body(0,title="Select Source, 0 - Image, 1 - Face Model, 2 - Source Folder"),
         face_model: str = Body("None",title="Filename of the face model (from 'models/reactor/faces'), e.g. elena.safetensors"),
         source_folder: str = Body("",title="The path to the folder containing source faces images"),
@@ -153,6 +154,7 @@ def reactor_api(_: gr.Blocks, app: FastAPI):
         gender_t = gender_target
         restore_first_bool = True if restore_first == 1 else False
         mask_face = True if mask_face == 1 else False
+        mouth_mask = True if mouth_mask == 1 else False
         random_image = False if random_image == 0 else True
         upscale_force = False if upscale_force == 0 else True
         up_options = EnhancementOptions(do_restore_first=restore_first_bool, scale=scale, upscaler=get_upscaler(upscaler), upscale_visibility=upscale_visibility,face_restorer=get_face_restorer(face_restorer),restorer_visibility=restorer_visibility,codeformer_weight=codeformer_weight,upscale_force=upscale_force)
@@ -161,7 +163,7 @@ def reactor_api(_: gr.Blocks, app: FastAPI):
         if use_model is None:
             raise Exception("Model not found")
         
-        args = [s_image, t_image, use_model, sf_index, f_index, up_options, gender_s, gender_t, True, True, device, mask_face, select_source, face_model, source_folder, None, random_image,det_options]
+        args = [s_image, t_image, use_model, sf_index, f_index, up_options, gender_s, gender_t, True, True, device, mask_face, mouth_mask, select_source, face_model, source_folder, None, random_image,det_options]
         # result,_,_ = pool.map(swap_face, *args)
         result,_,_ = await run_event(app,swap_face,*args)
         # result,_,_ = swap_face(s_image, t_image, use_model, sf_index, f_index, up_options, gender_s, gender_t, True, True, device, mask_face, select_source, face_model, source_folder, None, random_image,det_options)
@@ -181,22 +183,22 @@ def reactor_api(_: gr.Blocks, app: FastAPI):
                 logger.error("Error while saving result: %s",e)
         return {"image": api.encode_pil_to_base64(result)}
 
-    @app.get("/reactor/models")
+    @app.get("/reactor-x/models")
     async def reactor_models():
         model_names = [os.path.split(model)[1] for model in get_models()]
         return {"models": model_names}
     
-    @app.get("/reactor/upscalers")
+    @app.get("/reactor-x/upscalers")
     async def reactor_upscalers():
         names = [upscaler.name for upscaler in shared.sd_upscalers]
         return {"upscalers": names}
     
-    @app.get("/reactor/facemodels")
+    @app.get("/reactor-x/facemodels")
     async def reactor_facemodels():
         facemodels = [os.path.split(model)[1].split(".")[0] for model in get_facemodels()]
         return {"facemodels": facemodels}
 
-    @app.post("/reactor/facemodels")
+    @app.post("/reactor-x/facemodels")
     async def reactor_facemodels_build(
         source_images: list[str] = Body([""],title="Source Face Image List"),
         name: str = Body("",title="Face Model Name"),
