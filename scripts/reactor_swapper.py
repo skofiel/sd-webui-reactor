@@ -1,5 +1,6 @@
 import copy
 import os
+import threading
 from dataclasses import dataclass
 from typing import List, Union
 
@@ -28,7 +29,7 @@ from scripts.console_log_patch import apply_logging_patch
 from modules.face_restoration import FaceRestoration
 try: # A1111
     from modules import codeformer_model, gfpgan_model
-except: # SD.Next
+except ImportError: # SD.Next
     from modules.postprocess import codeformer_model, gfpgan_model
     set_SDNEXT()
 from modules.upscaler import UpscalerData
@@ -39,10 +40,10 @@ import scripts.reactor_sfw as sfw
 
 try:
     from modules.paths_internal import models_path
-except:
+except ImportError:
     try:
         from modules.paths import models_path
-    except:
+    except ImportError:
         models_path = os.path.abspath("models")
 
 import warnings
@@ -107,6 +108,8 @@ MASK_MODEL = None
 
 CURRENT_FS_MODEL_PATH = None
 CURRENT_MASK_MODEL_PATH = None
+
+_swap_lock = threading.Lock()
 
 SOURCE_FACES = None
 SOURCE_IMAGE_HASH = None
@@ -258,7 +261,7 @@ def get_gender(face, face_index):
     gender.reverse()
     try:
         face_gender = gender[face_index]
-    except:
+    except IndexError:
         logger.error("Gender Detection: No face with index = %s was found", face_index)
         return "None"
     return face_gender
@@ -292,7 +295,7 @@ def get_face_age(face, face_index):
     age.reverse()
     try:
         face_age = age[face_index]
-    except:
+    except IndexError:
         logger.error("Age Detection: No face with index = %s was found", face_index)
         return "None"
     return face_age
@@ -316,7 +319,7 @@ def get_face_single(img_data: np.ndarray, face, face_index=0, det_size=(640, 640
     face_age = "None"
     try:
         face_age = get_face_age(face, face_index)
-    except:
+    except (IndexError, AttributeError):
         logger.error("Cannot detect any Age for Face index = %s", face_index)
     
     face_gender = "None"
@@ -324,7 +327,7 @@ def get_face_single(img_data: np.ndarray, face, face_index=0, det_size=(640, 640
         face_gender = get_gender(face, face_index)
         gender_detected = face_gender
         face_gender = "Female" if face_gender == "F" else ("Male" if face_gender == "M" else "None")
-    except:
+    except (IndexError, AttributeError):
         logger.error("Cannot detect any Gender for Face index = %s", face_index)
     
     if gender_source != 0:
@@ -352,13 +355,9 @@ def get_face_single(img_data: np.ndarray, face, face_index=0, det_size=(640, 640
 
 
 def check_sfw_image(img: Image.Image):
-    tmp_img = "reactor_tmp.png"
     if check_process_halt():
         return None
-    img.save(tmp_img)
-    if not sfw.nsfw_image(tmp_img, NSFWDET_MODEL_PATH):
-        if os.path.exists(tmp_img):
-            os.remove(tmp_img)
+    if not sfw.nsfw_image(img, NSFWDET_MODEL_PATH):
         return img
     return None
 
@@ -385,6 +384,17 @@ def swap_face(
 ):
     global SOURCE_FACES, SOURCE_IMAGE_HASH, TARGET_FACES, TARGET_IMAGE_HASH, PROVIDERS, SOURCE_FACES_LIST, SOURCE_IMAGE_LIST_HASH
 
+    with _swap_lock:
+        return _swap_face_impl(source_img, target_img, model, source_faces_index, faces_index, enhancement_options, gender_source, gender_target, source_hash_check, target_hash_check, device, mask_face, select_source, face_model, source_folder, source_imgs, random_image, detection_options)
+
+def _swap_face_impl(
+    source_img, target_img, model, source_faces_index, faces_index,
+    enhancement_options, gender_source, gender_target, source_hash_check,
+    target_hash_check, device, mask_face, select_source, face_model,
+    source_folder, source_imgs, random_image, detection_options,
+):
+    global SOURCE_FACES, SOURCE_IMAGE_HASH, TARGET_FACES, TARGET_IMAGE_HASH, PROVIDERS, SOURCE_FACES_LIST, SOURCE_IMAGE_LIST_HASH
+
     result_image = target_img
 
     logger.status("Checking for any unsafe content")
@@ -392,7 +402,7 @@ def swap_face(
         return result_image, [], 0
 
     PROVIDERS = ["CUDAExecutionProvider"] if device == "CUDA" else ["CPUExecutionProvider"]
-    
+
     if check_process_halt():
         return result_image, [], 0
     
@@ -773,6 +783,7 @@ def operate(
 
     for face_num in faces_index:
         if check_process_halt():
+            result_image = Image.fromarray(cv2.cvtColor(result, cv2.COLOR_BGR2RGB))
             return result_image, [], 0
         if len(source_faces_index) > 1 and source_face_idx > 0:
             logger.status("Detecting Source Face, Index = %s", source_faces_index[source_face_idx])
@@ -834,7 +845,7 @@ def operate(
 
     result_image = Image.fromarray(cv2.cvtColor(result, cv2.COLOR_BGR2RGB))
     
-    if (enhancement_options is not None and swapped > 0) or enhancement_options.upscale_force:
+    if enhancement_options is not None and (swapped > 0 or enhancement_options.upscale_force):
         if mask_face and entire_mask_image is not None:
             result_image = enhance_image_and_mask(result_image, enhancement_options,Image.fromarray(target_img_orig),Image.fromarray(entire_mask_image).convert("L"))    
         else:    

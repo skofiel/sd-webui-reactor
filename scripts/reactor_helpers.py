@@ -17,10 +17,10 @@ from scripts.reactor_globals import DEVICE, BASE_PATH, FACE_MODELS_PATH, IS_SDNE
 
 try:
     from modules.paths_internal import models_path
-except:
+except ImportError:
     try:
         from modules.paths import models_path
-    except:
+    except ImportError:
         model_path = os.path.abspath("models")
 
 MODELS_PATH = None
@@ -240,8 +240,8 @@ def get_images_from_list(imgs: List):
     # return [Image.open(os.path.abspath(x.name)) for x in imgs],[os.path.basename(x.name) for x in imgs]
 
 def download(url, path, name):
-    request = urllib.request.urlopen(url)
-    total = int(request.headers.get('Content-Length', 0))
+    with urllib.request.urlopen(url) as request:
+        total = int(request.headers.get('Content-Length', 0))
     with tqdm(total=total, desc=f'[ReActor] Downloading {name} to {path}', unit='B', unit_scale=True, unit_divisor=1024) as progress:
         urllib.request.urlretrieve(url, path, reporthook=lambda count, block_size, total_size: progress.update(block_size))
 

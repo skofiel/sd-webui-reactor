@@ -5,7 +5,7 @@ from scripts.reactor_globals import DEVICE, DEVICE_LIST
 try:
     import torch.cuda as cuda
     EP_is_visible = True if cuda.is_available() else False
-except:
+except ImportError:
     EP_is_visible = False
 
 def update_models_list(selected: str):

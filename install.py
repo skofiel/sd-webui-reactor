@@ -8,10 +8,10 @@ from packaging import version as pv
 
 try:
     from modules.paths_internal import models_path
-except:
+except ImportError:
     try:
         from modules.paths import models_path
-    except:
+    except ImportError:
         models_path = os.path.abspath("models")
 
 
@@ -50,8 +50,8 @@ def is_installed (
         return False
     
 def download(url, path):
-    request = urllib.request.urlopen(url)
-    total = int(request.headers.get('Content-Length', 0))
+    with urllib.request.urlopen(url) as request:
+        total = int(request.headers.get('Content-Length', 0))
     with tqdm(total=total, desc='Downloading...', unit='B', unit_scale=True, unit_divisor=1024) as progress:
         urllib.request.urlretrieve(url, path, reporthook=lambda count, block_size, total_size: progress.update(block_size))
 
@@ -73,7 +73,7 @@ try:
         last_device = f.readline().strip()
     if last_device not in available_devices:
         last_device = None
-except:
+except (FileNotFoundError, OSError):
     last_device = "CPU"
     first_run = True
     with open(os.path.join(BASE_PATH, "last_device.txt"), "w") as txt:

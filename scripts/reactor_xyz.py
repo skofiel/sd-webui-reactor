@@ -90,5 +90,5 @@ def run():
 try:
     import modules.script_callbacks as script_callbacks
     script_callbacks.on_before_ui(run)
-except:
+except Exception:
     pass

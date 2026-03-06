@@ -45,7 +45,7 @@ def IA_cap(cond: bool, label: str=""):
 try:
     from modules.ui_components import InputAccordion
     NO_IA = False
-except:
+except ImportError:
     NO_IA = True
     InputAccordion = IA_cap
 
@@ -393,7 +393,7 @@ class FaceSwapScript(scripts.Script):
                                 for i,x in enumerate(result):
                                     try:
                                         img_path = save_image(result[i], p.outpath_samples, "", p.all_seeds[0], p.all_prompts[0], "png", info=info, p=p, suffix=suffix)
-                                    except:
+                                    except Exception:
                                         logger.error("Cannot save a result image - please, check SD WebUI Settings (Saving and Paths)")
 
                             elif len(result) == 0:
@@ -405,7 +405,7 @@ class FaceSwapScript(scripts.Script):
                                 suffix = "-swapped"
                                 try:
                                     img_path = save_image(result, p.outpath_samples, "", p.all_seeds[0], p.all_prompts[0], "png", info=info, p=p, suffix=suffix)
-                                except:
+                                except Exception:
                                     logger.error("Cannot save a result image - please, check SD WebUI Settings (Saving and Paths)")
                             elif result is None:
                                 logger.error("Cannot create a result image")
@@ -421,7 +421,7 @@ class FaceSwapScript(scripts.Script):
                     result_images.insert(0, grid)
                     try:
                         save_image(grid, p.outpath_grids, "grid", p.all_seeds[0], p.all_prompts[0], shared.opts.grid_format, info=info, short_filename=not shared.opts.grid_extended_filename, p=p, grid=True)
-                    except:
+                    except Exception:
                         logger.error("Cannot save a grid - please, check SD WebUI Settings (Saving and Paths)")
                 
                 processed.images = result_images
@@ -436,7 +436,7 @@ class FaceSwapScript(scripts.Script):
                     processed.images = [self.result]
                     try:
                         img_path = save_image(self.result, p.outpath_samples, "", p.all_seeds[0], p.all_prompts[0], "png", info=orig_infotexts[0], p=p, suffix="")
-                    except:
+                    except Exception:
                         logger.error("Cannot save a result image - please, check SD WebUI Settings (Saving and Paths)")
                 else:
                     logger.error("Cannot create a result image")
@@ -494,7 +494,7 @@ class FaceSwapScript(scripts.Script):
                 #     if len(output) != 0:
                 #         with open(result_path, 'w', encoding="utf8") as f:
                 #             f.writelines(output)
-            except:
+            except Exception:
                 logger.error("Cannot create a result image")
 
 

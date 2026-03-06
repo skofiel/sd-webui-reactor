@@ -15,7 +15,7 @@ def update_fm_list(selected: str):
         return gr.Dropdown.update(
             value=selected, choices=get_model_names(get_facemodels)
         )
-    except: # GR4.x
+    except Exception: # GR4.x
         return gr.Dropdown(
             value=selected, choices=get_model_names(get_facemodels)
         )
@@ -37,7 +37,7 @@ def show(is_img2img: bool, show_br: bool = True, **msgs):
                     # save_original: gr.Checkbox.update(value=False,visible=False),
                     imgs_hash_clear: gr.Button.update(visible=True)
                 }
-            except: # GR4.x
+            except Exception: # GR4.x
                 return {
                     control_col_1: gr.Column(visible=False),
                     control_col_2: gr.Column(visible=False),
@@ -54,7 +54,7 @@ def show(is_img2img: bool, show_br: bool = True, **msgs):
                     # save_original: gr.Checkbox.update(value=SAVE_ORIGINAL,visible=show_br),
                     imgs_hash_clear: gr.Button.update(visible=False)
                 }
-            except: # GR4.x
+            except Exception: # GR4.x
                 return {
                     control_col_1: gr.Column(visible=True),
                     control_col_2: gr.Column(visible=False),
@@ -71,7 +71,7 @@ def show(is_img2img: bool, show_br: bool = True, **msgs):
                     # save_original: gr.Checkbox.update(value=SAVE_ORIGINAL,visible=show_br),
                     imgs_hash_clear: gr.Button.update(visible=False)
                 }
-            except: # GR4.x
+            except Exception: # GR4.x
                 return {
                     control_col_1: gr.Column(visible=False),
                     control_col_2: gr.Column(visible=True),
