@@ -130,6 +130,15 @@ def reactor_api(_: gr.Blocks, app: FastAPI):
         det_thresh: float = Body(0.5,title="Face Detection Threshold"),
         det_maxnum: int = Body(0,title="Maximum number of faces to detect (0 is unlimited)"),
     ):
+        if device not in ("CPU", "CUDA"):
+            raise Exception("device must be 'CPU' or 'CUDA'")
+        if not (0 <= det_thresh <= 1):
+            raise Exception("det_thresh must be between 0 and 1")
+        if not (0 <= codeformer_weight <= 1):
+            raise Exception("codeformer_weight must be between 0 and 1")
+        if scale < 1:
+            raise Exception("scale must be >= 1")
+
         s_image = api.decode_base64_to_image(source_image) if select_source == 0 else None
         t_image = api.decode_base64_to_image(target_image)
 
@@ -150,7 +159,7 @@ def reactor_api(_: gr.Blocks, app: FastAPI):
         det_options = DetectionOptions(det_thresh=det_thresh, det_maxnum=det_maxnum)
         use_model = get_full_model(model)
         if use_model is None:
-            Exception("Model not found")
+            raise Exception("Model not found")
         
         args = [s_image, t_image, use_model, sf_index, f_index, up_options, gender_s, gender_t, True, True, device, mask_face, select_source, face_model, source_folder, None, random_image,det_options]
         # result,_,_ = pool.map(swap_face, *args)
@@ -200,5 +209,5 @@ def reactor_api(_: gr.Blocks, app: FastAPI):
 try:
     import modules.script_callbacks as script_callbacks
     script_callbacks.on_app_started(reactor_api)
-except:
+except Exception:
     pass

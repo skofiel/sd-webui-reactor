@@ -3,10 +3,10 @@ from pathlib import Path
 
 try:
     from modules.paths_internal import models_path
-except:
+except ImportError:
     try:
         from modules.paths import models_path
-    except:
+    except ImportError:
         models_path = os.path.abspath("models")
 
 IS_RUN: bool = False
