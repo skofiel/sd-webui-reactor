@@ -300,6 +300,13 @@ def half_det_size(det_size):
 
 def analyze_faces(img_data: np.ndarray, det_size=(640, 640), det_thresh=0.5, det_maxnum=0):
     logger.info("Applied Execution Provider: %s", PROVIDERS[0])
+    # Auto-ajustar det_size según la resolución de la imagen
+    if det_size == (640, 640):
+        img_max = max(img_data.shape[0], img_data.shape[1])
+        if img_max > 1920:
+            det_size = (1280, 1280)
+        elif img_max > 1280:
+            det_size = (960, 960)
     face_analyser = copy.deepcopy(getAnalysisModel())
     face_analyser.prepare(ctx_id=0, det_thresh=det_thresh, det_size=det_size)
     return face_analyser.get(img_data, max_num=det_maxnum)

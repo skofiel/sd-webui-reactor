@@ -50,10 +50,36 @@ def process_face_image(
         return Image.fromarray(output)
 
 
+def _auto_color_transfer(source: np.ndarray, target: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Transfer color statistics from target to source within masked region (LAB space)"""
+    mask_gray = mask if len(mask.shape) == 2 else cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+    mask_bool = mask_gray > 128
+    if mask_bool.sum() < 100:
+        return source
+    source_lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype(np.float32)
+    target_lab = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype(np.float32)
+    for ch in range(3):
+        src_vals = source_lab[:,:,ch][mask_bool]
+        tgt_vals = target_lab[:,:,ch][mask_bool]
+        src_mean, src_std = src_vals.mean(), max(src_vals.std(), 1e-6)
+        tgt_mean, tgt_std = tgt_vals.mean(), max(tgt_vals.std(), 1e-6)
+        source_lab[:,:,ch][mask_bool] = ((src_vals - src_mean) * (tgt_std / src_std)) + tgt_mean
+    return cv2.cvtColor(np.clip(source_lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+
+
 def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face,entire_mask_image:np.array,mouth_mask:bool=False)->np.ndarray:
     logger.status("Correcting Face Mask")
     mask_generator =  BiSeNetMaskGenerator()
-    face = FaceArea(target_image,Rect.from_ndarray(np.array(target_face.bbox)),1.6,512,"")
+
+    # Mejora 4: Face margin adaptativo
+    bbox = target_face.bbox
+    face_w = bbox[2] - bbox[0]
+    face_h = bbox[3] - bbox[1]
+    img_size = max(target_image.shape[0], target_image.shape[1])
+    face_ratio = max(face_w, face_h) / img_size
+    auto_margin = max(1.2, min(2.0, 1.6 + (0.3 - face_ratio)))
+
+    face = FaceArea(target_image,Rect.from_ndarray(np.array(target_face.bbox)),auto_margin,512,"")
     face_image = np.array(face.image)
     process_face_image(face)
     face_area_on_image = face.face_area_on_image
@@ -67,15 +93,36 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
         mask_size=0,
         use_minimal_area=True
     )
-    mask = cv2.blur(mask, (12, 12))
-    # """entire_mask_image = np.zeros_like(target_image)"""
+
+    # Mejora 2: Blur kernel adaptativo al tamaño de la cara
+    face_size = max(face.width, face.height)
+    kernel_size = max(7, int(face_size * 0.03))
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+    mask = cv2.GaussianBlur(mask, (kernel_size, kernel_size), 0)
+
     larger_mask = cv2.resize(mask, dsize=(face.width, face.height))
     entire_mask_image[
         face.top : face.bottom,
         face.left : face.right,
     ] = larger_mask
-   
-    result = Image.composite(Image.fromarray(swapped_image),Image.fromarray(target_image), Image.fromarray(entire_mask_image).convert("L"))
+
+    # Mejora 5: Corrección de color automática
+    swapped_image = _auto_color_transfer(swapped_image, target_image, entire_mask_image)
+
+    # Mejora 1: Seamless Clone automático con fallback
+    try:
+        mask_gray = entire_mask_image if len(entire_mask_image.shape) == 2 else cv2.cvtColor(entire_mask_image, cv2.COLOR_BGR2GRAY)
+        center = (int((face.left + face.right) / 2), int((face.top + face.bottom) / 2))
+        center = (max(1, min(center[0], target_image.shape[1] - 2)),
+                  max(1, min(center[1], target_image.shape[0] - 2)))
+        result = cv2.seamlessClone(swapped_image, target_image, mask_gray, center, cv2.NORMAL_CLONE)
+    except cv2.error:
+        logger.warning("seamlessClone failed, falling back to simple composite")
+        result = np.array(Image.composite(
+            Image.fromarray(swapped_image), Image.fromarray(target_image),
+            Image.fromarray(entire_mask_image).convert("L")))
+
     return np.array(result)
 
 
