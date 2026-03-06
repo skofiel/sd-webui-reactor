@@ -10,6 +10,18 @@ from scripts.reactor_entities.face import FaceArea
 from scripts.reactor_entities.rect import Rect
 
 
+def _get_mask_generator(mask_engine: str = "BiSeNet"):
+    """Get the appropriate mask generator. FaRL is lazy-imported to avoid loading if unused."""
+    if mask_engine == "FaRL":
+        try:
+            from scripts.reactor_inferencers.farl_mask_generator import FaRLMaskGenerator
+            return FaRLMaskGenerator()
+        except Exception as e:
+            logger.warning("Failed to load FaRL engine: %s. Falling back to BiSeNet.", e)
+            return BiSeNetMaskGenerator()
+    return BiSeNetMaskGenerator()
+
+
 colors = [
     (255, 0, 0),
     (0, 255, 0),
@@ -132,9 +144,9 @@ def _compute_adaptive_params(scene: dict, edge_contrast: float, face_size: int) 
     }
 
 
-def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face,entire_mask_image:np.array,mouth_mask:bool=False,mask_face_mode:int=1)->np.ndarray:
-    logger.status("Correcting Face Mask%s", " (Extended)" if mask_face_mode == 2 else "")
-    mask_generator = BiSeNetMaskGenerator()
+def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face,entire_mask_image:np.array,mouth_mask:bool=False,mask_face_mode:int=1,mask_engine:str="BiSeNet")->np.ndarray:
+    logger.status("Correcting Face Mask%s [%s]", " (Extended)" if mask_face_mode == 2 else "", mask_engine)
+    mask_generator = _get_mask_generator(mask_engine)
     face = FaceArea(target_image,Rect.from_ndarray(np.array(target_face.bbox)),1.6,512,"")
     face_image = np.array(face.image)
     process_face_image(face)

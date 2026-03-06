@@ -74,4 +74,11 @@ def show(hash_check_block: bool = True):
                 label="Target Image Hash Check",
                 info="Affects if you use Extras tab or img2img with only 'Swap in source image' on."
             )
-    return model, device, console_logging_level, source_hash_check, target_hash_check
+        gr.Markdown("<br>")
+        mask_engine = gr.Radio(
+            ["BiSeNet", "FaRL"],
+            value="BiSeNet",
+            label="Mask Engine",
+            info="BiSeNet = default (fast). FaRL = higher precision face boundaries (downloads ~350MB on first use)"
+        )
+    return model, device, console_logging_level, source_hash_check, target_hash_check, mask_engine

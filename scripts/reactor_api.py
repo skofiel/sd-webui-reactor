@@ -130,6 +130,7 @@ def reactor_api(_: gr.Blocks, app: FastAPI):
         upscale_force: int = Body(0,title="Force Upscale even if no face found"),
         det_thresh: float = Body(0.5,title="Face Detection Threshold"),
         det_maxnum: int = Body(0,title="Maximum number of faces to detect (0 is unlimited)"),
+        mask_engine: str = Body("BiSeNet",title="Mask Engine: 'BiSeNet' or 'FaRL'"),
     ):
         if device not in ("CPU", "CUDA"):
             raise Exception("device must be 'CPU' or 'CUDA'")
@@ -163,7 +164,9 @@ def reactor_api(_: gr.Blocks, app: FastAPI):
         if use_model is None:
             raise Exception("Model not found")
         
-        args = [s_image, t_image, use_model, sf_index, f_index, up_options, gender_s, gender_t, True, True, device, mask_face, mouth_mask, select_source, face_model, source_folder, None, random_image,det_options]
+        if mask_engine not in ("BiSeNet", "FaRL"):
+            mask_engine = "BiSeNet"
+        args = [s_image, t_image, use_model, sf_index, f_index, up_options, gender_s, gender_t, True, True, device, mask_face, mouth_mask, select_source, face_model, source_folder, None, random_image,det_options,mask_engine]
         # result,_,_ = pool.map(swap_face, *args)
         result,_,_ = await run_event(app,swap_face,*args)
         # result,_,_ = swap_face(s_image, t_image, use_model, sf_index, f_index, up_options, gender_s, gender_t, True, True, device, mask_face, select_source, face_model, source_folder, None, random_image,det_options)

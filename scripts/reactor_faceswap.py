@@ -89,8 +89,8 @@ class FaceSwapScript(scripts.Script):
             ui_tools.show()
             
             # TAB SETTINGS
-            model, device, console_logging_level, source_hash_check, target_hash_check = ui_settings.show()
-            
+            model, device, console_logging_level, source_hash_check, target_hash_check, mask_engine = ui_settings.show()
+
             gr.Markdown("<span style='display:block;text-align:right;padding:3px;font-size:0.666em;margin-bottom:-12px;'>by <a style='font-weight:normal' href='https://github.com/Gourieff' target='_blank'>Eugene Gourieff</a></span>")
 
         return [
@@ -126,6 +126,7 @@ class FaceSwapScript(scripts.Script):
             det_thresh,
             det_maxnum,
             selected_tab,
+            mask_engine,
         ]
 
 
@@ -198,6 +199,7 @@ class FaceSwapScript(scripts.Script):
         det_thresh,
         det_maxnum,
         selected_tab,
+        mask_engine="BiSeNet",
     ):
         self.enable = enable
         if self.enable:
@@ -207,8 +209,9 @@ class FaceSwapScript(scripts.Script):
             reset_messaged()
             if check_process_halt():
                 return
-            
+
             global SWAPPER_MODELS_PATH
+            self.mask_engine = mask_engine if mask_engine else "BiSeNet"
             if selected_tab == "tab_single":
                 self.source = img
             else:
@@ -320,6 +323,7 @@ class FaceSwapScript(scripts.Script):
                             source_imgs = None,
                             random_image = False,
                             detection_options=self.detection_options,
+                            mask_engine=self.mask_engine,
                         )
                         p.init_images[i] = result
                         # result_path = get_image_path(p.init_images[i], p.outpath_samples, "", p.all_seeds[i], p.all_prompts[i], "txt", p=p, suffix="-swapped")
@@ -389,6 +393,7 @@ class FaceSwapScript(scripts.Script):
                             source_imgs = self.source_imgs,
                             random_image = self.random_image,
                             detection_options=self.detection_options,
+                            mask_engine=self.mask_engine,
                         )
 
                         if self.select_source == 2 or (self.select_source == 0 and self.source_imgs is not None and self.source is None):
@@ -491,6 +496,7 @@ class FaceSwapScript(scripts.Script):
                 source_imgs = None,
                 random_image = False,
                 detection_options=self.detection_options,
+                mask_engine=self.mask_engine,
             )
             self.result = result
             try:
@@ -542,8 +548,8 @@ class FaceSwapScriptExtras(scripts_postprocessing.ScriptPostprocessing):
             ui_tools.show()
                         
             # TAB SETTINGS
-            model, device, console_logging_level, source_hash_check, target_hash_check = ui_settings.show(hash_check_block=False)
-                        
+            model, device, console_logging_level, source_hash_check, target_hash_check, mask_engine = ui_settings.show(hash_check_block=False)
+
             gr.Markdown("<span style='display:block;text-align:right;padding-right:3px;font-size:0.666em;margin: -9px 0'>by <a style='font-weight:normal' href='https://github.com/Gourieff' target='_blank'>Eugene Gourieff</a></span>")
 
         args = {
@@ -574,6 +580,7 @@ class FaceSwapScriptExtras(scripts_postprocessing.ScriptPostprocessing):
             'det_thresh': det_thresh,
             'det_maxnum': det_maxnum,
             'selected_tab': selected_tab,
+            'mask_engine': mask_engine,
         }
         return args
 
@@ -636,6 +643,7 @@ class FaceSwapScriptExtras(scripts_postprocessing.ScriptPostprocessing):
             self.device = args['device']
             self.mask_face = args['mask_face']
             self.mouth_mask = args.get('mouth_mask', False)
+            self.mask_engine = args.get('mask_engine', 'BiSeNet')
             self.select_source = args['select_source']
             self.face_model = args['face_model']
             self.source_folder = args['source_folder']
@@ -721,6 +729,7 @@ class FaceSwapScriptExtras(scripts_postprocessing.ScriptPostprocessing):
                     source_imgs=self.source_imgs,
                     random_image=self.random_image,
                     detection_options=self.detection_options,
+                    mask_engine=self.mask_engine,
                 )
                 if self.select_source == 2 or (self.select_source == 0 and self.source_imgs is not None and self.source is None):
                     if len(result) > 0 and swapped > 0:
