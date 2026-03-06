@@ -3,3 +3,4 @@ insightface==0.7.3
 onnx>=1.17.0
 opencv-python>=4.7.0.72
 pyfacer>=1.0.7
+facexformer-pipeline>=0.2.8

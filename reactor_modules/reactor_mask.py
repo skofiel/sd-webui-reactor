@@ -11,13 +11,20 @@ from scripts.reactor_entities.rect import Rect
 
 
 def _get_mask_generator(mask_engine: str = "BiSeNet"):
-    """Get the appropriate mask generator. FaRL is lazy-imported to avoid loading if unused."""
+    """Get the appropriate mask generator. FaRL/FaceXFormer are lazy-imported to avoid loading if unused."""
     if mask_engine == "FaRL":
         try:
             from scripts.reactor_inferencers.farl_mask_generator import FaRLMaskGenerator
             return FaRLMaskGenerator()
         except Exception as e:
             logger.warning("Failed to load FaRL engine: %s. Falling back to BiSeNet.", e)
+            return BiSeNetMaskGenerator()
+    if mask_engine == "FaceXFormer":
+        try:
+            from scripts.reactor_inferencers.facexformer_mask_generator import FaceXFormerMaskGenerator
+            return FaceXFormerMaskGenerator()
+        except Exception as e:
+            logger.warning("Failed to load FaceXFormer engine: %s. Falling back to BiSeNet.", e)
             return BiSeNetMaskGenerator()
     return BiSeNetMaskGenerator()
 
@@ -112,8 +119,9 @@ def _compute_edge_contrast(swapped: np.ndarray, target: np.ndarray, mask: np.nda
     return float(diff[boundary].mean()) / 255.0
 
 
-def _compute_adaptive_params(scene: dict, edge_contrast: float, face_size: int) -> dict:
-    """Compute optimal mask parameters based on scene analysis."""
+def _compute_adaptive_params(scene: dict, edge_contrast: float, face_size: int, extra_analysis: dict = None) -> dict:
+    """Compute optimal mask parameters based on scene analysis.
+    extra_analysis: optional dict from FaceXFormer with 'headpose', 'visibility', etc."""
     # Erosion: more with accessories to avoid halo
     erosion = 0
     if scene["has_glasses"]:
@@ -134,6 +142,22 @@ def _compute_adaptive_params(scene: dict, edge_contrast: float, face_size: int) 
 
     # Seamless clone: use when contrast is noticeable and mask doesn't touch border
     use_seamless = edge_contrast > 0.08
+
+    # FaceXFormer extra data adjustments
+    if extra_analysis is not None:
+        headpose = extra_analysis.get('headpose')
+        if headpose is not None:
+            try:
+                yaw = abs(float(headpose[0])) if hasattr(headpose, '__getitem__') else 0
+                # Extreme profile angles: reduce seamless clone aggressiveness
+                if yaw > 30:
+                    use_seamless = False
+                    logger.info("Extended mask - headpose yaw=%.1f, disabling seamlessClone", yaw)
+                # Moderate angles: increase blur for smoother transition
+                if yaw > 15:
+                    kernel_size = max(kernel_size, base_kernel + 3)
+            except (TypeError, IndexError, ValueError):
+                pass
 
     return {
         "erosion": erosion,
@@ -181,7 +205,9 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
         temp_mask[face.top:face.bottom, face.left:face.right] = larger_mask_pre
         edge_contrast = _compute_edge_contrast(swapped_image, target_image, temp_mask)
 
-        params = _compute_adaptive_params(scene, edge_contrast, face_size)
+        # Retrieve FaceXFormer extra analysis if available
+        extra_analysis = getattr(mask_generator, 'last_analysis', None)
+        params = _compute_adaptive_params(scene, edge_contrast, face_size, extra_analysis)
         logger.info("Extended mask - params: erosion=%d, kernel=%d, gaussian=%s, color=%s, seamless=%s",
                      params["erosion"], params["kernel_size"], params["use_gaussian"],
                      params["apply_color"], params["use_seamless"])
