@@ -14,15 +14,14 @@ from insightface.app.common import Face
 
 from scripts.reactor_globals import FACE_MODELS_PATH
 from scripts.reactor_helpers import (
-    get_image_md5hash, 
-    get_Device, 
-    save_face_model, 
-    load_face_model, 
+    get_image_md5hash,
+    get_Device,
+    save_face_model,
+    load_face_model,
     get_images_from_folder,
     get_random_image_from_folder,
     get_images_from_list,
     set_SDNEXT,
-    check_nsfwdet_model
 )
 from scripts.console_log_patch import apply_logging_patch
 
@@ -36,8 +35,6 @@ from modules.upscaler import UpscalerData
 from modules.shared import state
 from scripts.reactor_logger import logger
 from reactor_modules.reactor_mask import apply_face_mask
-import scripts.reactor_sfw as sfw
-
 try:
     from modules.paths_internal import models_path
 except ImportError:
@@ -57,9 +54,6 @@ if DEVICE == "CUDA":
     PROVIDERS = ["CUDAExecutionProvider"]
 else:
     PROVIDERS = ["CPUExecutionProvider"]
-
-NSFWDET_MODEL_PATH = os.path.join(models_path, "nsfw_detector","vit-base-nsfw-detector")
-check_nsfwdet_model(NSFWDET_MODEL_PATH)
 
 @dataclass
 class EnhancementOptions:
@@ -354,14 +348,6 @@ def get_face_single(img_data: np.ndarray, face, face_index=0, det_size=(640, 640
         return None, 0, face_age, face_gender
 
 
-def check_sfw_image(img: Image.Image):
-    if check_process_halt():
-        return None
-    if not sfw.nsfw_image(img, NSFWDET_MODEL_PATH):
-        return img
-    return None
-
-
 def swap_face(
     source_img: Image.Image,
     target_img: Image.Image,
@@ -396,10 +382,6 @@ def _swap_face_impl(
     global SOURCE_FACES, SOURCE_IMAGE_HASH, TARGET_FACES, TARGET_IMAGE_HASH, PROVIDERS, SOURCE_FACES_LIST, SOURCE_IMAGE_LIST_HASH
 
     result_image = target_img
-
-    logger.status("Checking for any unsafe content")
-    if check_sfw_image(result_image) is None:
-        return result_image, [], 0
 
     PROVIDERS = ["CUDAExecutionProvider"] if device == "CUDA" else ["CPUExecutionProvider"]
 
