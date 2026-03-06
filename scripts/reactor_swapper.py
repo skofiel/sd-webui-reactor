@@ -361,6 +361,7 @@ def swap_face(
     target_hash_check: bool = False,
     device: str = "CPU",
     mask_face: bool = False,
+    mouth_mask: bool = False,
     select_source: int = 0,
     face_model: str = "None",
     source_folder: str = "",
@@ -371,12 +372,12 @@ def swap_face(
     global SOURCE_FACES, SOURCE_IMAGE_HASH, TARGET_FACES, TARGET_IMAGE_HASH, PROVIDERS, SOURCE_FACES_LIST, SOURCE_IMAGE_LIST_HASH
 
     with _swap_lock:
-        return _swap_face_impl(source_img, target_img, model, source_faces_index, faces_index, enhancement_options, gender_source, gender_target, source_hash_check, target_hash_check, device, mask_face, select_source, face_model, source_folder, source_imgs, random_image, detection_options)
+        return _swap_face_impl(source_img, target_img, model, source_faces_index, faces_index, enhancement_options, gender_source, gender_target, source_hash_check, target_hash_check, device, mask_face, mouth_mask, select_source, face_model, source_folder, source_imgs, random_image, detection_options)
 
 def _swap_face_impl(
     source_img, target_img, model, source_faces_index, faces_index,
     enhancement_options, gender_source, gender_target, source_hash_check,
-    target_hash_check, device, mask_face, select_source, face_model,
+    target_hash_check, device, mask_face, mouth_mask, select_source, face_model,
     source_folder, source_imgs, random_image, detection_options,
 ):
     global SOURCE_FACES, SOURCE_IMAGE_HASH, TARGET_FACES, TARGET_IMAGE_HASH, PROVIDERS, SOURCE_FACES_LIST, SOURCE_IMAGE_LIST_HASH
@@ -516,7 +517,7 @@ def _swap_face_impl(
                     
                     elif source_face is not None:
 
-                        result_image, output, swapped = operate(source_img_ff[i],target_img,target_img_orig,model,source_faces_index,faces_index,source_faces,target_faces,gender_source,gender_target,source_face,wrong_gender,source_age,source_gender,output,swapped,mask_face,entire_mask_image,enhancement_options,detection_options)
+                        result_image, output, swapped = operate(source_img_ff[i],target_img,target_img_orig,model,source_faces_index,faces_index,source_faces,target_faces,gender_source,gender_target,source_face,wrong_gender,source_age,source_gender,output,swapped,mask_face,mouth_mask,entire_mask_image,enhancement_options,detection_options)
 
                         result.append(result_image)
 
@@ -625,7 +626,7 @@ def _swap_face_impl(
                 
                 elif source_face is not None:
 
-                    result_image, output, swapped = operate(source_img,target_img,target_img_orig,model,source_faces_index,faces_index,source_faces,target_faces,gender_source,gender_target,source_face,wrong_gender,source_age,source_gender,output,swapped,mask_face,entire_mask_image,enhancement_options,detection_options)
+                    result_image, output, swapped = operate(source_img,target_img,target_img_orig,model,source_faces_index,faces_index,source_faces,target_faces,gender_source,gender_target,source_face,wrong_gender,source_age,source_gender,output,swapped,mask_face,mouth_mask,entire_mask_image,enhancement_options,detection_options)
                 
                 else:
                     logger.status("No source face(s) in the provided Index")
@@ -754,6 +755,7 @@ def operate(
         output,
         swapped,
         mask_face,
+        mouth_mask,
         entire_mask_image,
         enhancement_options,
         detection_options,
@@ -792,7 +794,7 @@ def operate(
                 swapped_image = face_swapper.get(result, target_face, source_face)
                                         
                 if mask_face:
-                    result = apply_face_mask(swapped_image=swapped_image,target_image=result,target_face=target_face,entire_mask_image=entire_mask_image)
+                    result = apply_face_mask(swapped_image=swapped_image,target_image=result,target_face=target_face,entire_mask_image=entire_mask_image,mouth_mask=mouth_mask)
                 else:
                     result = swapped_image
                 swapped += 1

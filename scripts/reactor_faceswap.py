@@ -77,8 +77,8 @@ class FaceSwapScript(scripts.Script):
             msgs: dict = {
                 "extra_multiple_source": "",
             }
-            img, imgs, selected_tab, select_source, face_model, source_folder, save_original, mask_face, source_faces_index, gender_source, faces_index, gender_target, face_restorer_name, face_restorer_visibility, codeformer_weight, swap_in_source, swap_in_generated, random_image = ui_main.show(is_img2img=is_img2img, **msgs)
-            
+            img, imgs, selected_tab, select_source, face_model, source_folder, save_original, mask_face, mouth_mask, source_faces_index, gender_source, faces_index, gender_target, face_restorer_name, face_restorer_visibility, codeformer_weight, swap_in_source, swap_in_generated, random_image = ui_main.show(is_img2img=is_img2img, **msgs)
+
             # TAB DETECTION
             det_thresh, det_maxnum = ui_detection.show()
             
@@ -116,6 +116,7 @@ class FaceSwapScript(scripts.Script):
             target_hash_check,
             device,
             mask_face,
+            mouth_mask,
             select_source,
             face_model,
             source_folder,
@@ -187,6 +188,7 @@ class FaceSwapScript(scripts.Script):
         target_hash_check,
         device,
         mask_face,
+        mouth_mask,
         select_source,
         face_model,
         source_folder,
@@ -229,6 +231,7 @@ class FaceSwapScript(scripts.Script):
             self.target_hash_check = target_hash_check
             self.device = device
             self.mask_face = mask_face
+            self.mouth_mask = mouth_mask
             self.select_source = select_source
             self.face_model = face_model
             self.source_folder = source_folder
@@ -262,11 +265,13 @@ class FaceSwapScript(scripts.Script):
                 self.target_hash_check = False
             if self.mask_face is None:
                 self.mask_face = False
+            if self.mouth_mask is None:
+                self.mouth_mask = False
             if self.random_image is None:
                 self.random_image = False
             if self.upscale_force is None:
                 self.upscale_force = False
-            
+
             if shared.state.job_count > 0:
                 # logger.debug(f"Job count: {shared.state.job_count}")
                 self.face_restorer_visibility = shared.opts.data['restorer_visibility'] if 'restorer_visibility' in shared.opts.data.keys() else face_restorer_visibility
@@ -306,6 +311,7 @@ class FaceSwapScript(scripts.Script):
                             target_hash_check=self.target_hash_check,
                             device=self.device,
                             mask_face=self.mask_face,
+                            mouth_mask=self.mouth_mask,
                             select_source=self.select_source,
                             face_model = self.face_model,
                             source_folder = None,
@@ -374,6 +380,7 @@ class FaceSwapScript(scripts.Script):
                             target_hash_check=self.target_hash_check,
                             device=self.device,
                             mask_face=self.mask_face,
+                            mouth_mask=self.mouth_mask,
                             select_source=self.select_source,
                             face_model = self.face_model,
                             source_folder = self.source_folder,
@@ -475,6 +482,7 @@ class FaceSwapScript(scripts.Script):
                 target_hash_check=self.target_hash_check,
                 device=self.device,
                 mask_face=self.mask_face,
+                mouth_mask=self.mouth_mask,
                 select_source=self.select_source,
                 face_model = self.face_model,
                 source_folder = None,
@@ -499,7 +507,7 @@ class FaceSwapScript(scripts.Script):
 
 
 class FaceSwapScriptExtras(scripts_postprocessing.ScriptPostprocessing):
-    name = 'ReActor'
+    name = 'ReActor-X'
     order = 20000
 
     def ui(self):
@@ -520,7 +528,7 @@ class FaceSwapScriptExtras(scripts_postprocessing.ScriptPostprocessing):
             msgs: dict = {
                 "extra_multiple_source": "",
             }
-            img, imgs, selected_tab, select_source, face_model, source_folder, save_original, mask_face, source_faces_index, gender_source, faces_index, gender_target, face_restorer_name, face_restorer_visibility, codeformer_weight, swap_in_source, swap_in_generated, random_image = ui_main.show(is_img2img=False, show_br=False, **msgs)
+            img, imgs, selected_tab, select_source, face_model, source_folder, save_original, mask_face, mouth_mask, source_faces_index, gender_source, faces_index, gender_target, face_restorer_name, face_restorer_visibility, codeformer_weight, swap_in_source, swap_in_generated, random_image = ui_main.show(is_img2img=False, show_br=False, **msgs)
             
             # TAB DETECTION
             det_thresh, det_maxnum = ui_detection.show()
@@ -554,6 +562,7 @@ class FaceSwapScriptExtras(scripts_postprocessing.ScriptPostprocessing):
             'codeformer_weight': codeformer_weight,
             'device': device,
             'mask_face': mask_face,
+            'mouth_mask': mouth_mask,
             'select_source': select_source,
             'face_model': face_model,
             'source_folder': source_folder,
@@ -624,6 +633,7 @@ class FaceSwapScriptExtras(scripts_postprocessing.ScriptPostprocessing):
             self.codeformer_weight = args['codeformer_weight']
             self.device = args['device']
             self.mask_face = args['mask_face']
+            self.mouth_mask = args.get('mouth_mask', False)
             self.select_source = args['select_source']
             self.face_model = args['face_model']
             self.source_folder = args['source_folder']
@@ -651,6 +661,8 @@ class FaceSwapScriptExtras(scripts_postprocessing.ScriptPostprocessing):
                 self.faces_index = [0]
             if self.mask_face is None:
                 self.mask_face = False
+            if self.mouth_mask is None:
+                self.mouth_mask = False
             if self.random_image is None:
                 self.random_image = False
             if self.upscale_force is None:
@@ -698,6 +710,7 @@ class FaceSwapScriptExtras(scripts_postprocessing.ScriptPostprocessing):
                     target_hash_check=True,
                     device=self.device,
                     mask_face=self.mask_face,
+                    mouth_mask=self.mouth_mask,
                     select_source=self.select_source,
                     face_model=self.face_model,
                     source_folder=self.source_folder,
@@ -716,14 +729,14 @@ class FaceSwapScriptExtras(scripts_postprocessing.ScriptPostprocessing):
                                 grid = make_grid(result)
                                 result.insert(0, grid)
                                 image = grid
-                        pp.info["ReActor"] = True
+                        pp.info["ReActor-X"] = True
                         pp.image = image
                         logger.status("---Done!---")
                     else:
                         logger.error("Cannot create a result image")
                 else:
                     try:
-                        pp.info["ReActor"] = True
+                        pp.info["ReActor-X"] = True
 
                         if alpha is not None:
                             logger.debug(f"result = {result}")

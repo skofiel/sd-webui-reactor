@@ -70,12 +70,15 @@ class BiSeNetMaskGenerator(MaskGenerator):
         keep_neck = "Neck" in affected_areas
         keep_hair = "Hair" in affected_areas
         keep_hat = "Hat" in affected_areas
+        exclude_mouth = "MouthExclude" in affected_areas
 
         mask = np.zeros((face.shape[0], face.shape[1], 3), dtype=np.uint8)
         num_of_class = np.max(face)
         for i in range(1, num_of_class + 1):
             index = np.where(face == i)
             if i < 14 and keep_face:
+                if exclude_mouth and i == 11:
+                    continue
                 mask[index[0], index[1], :] = [255, 255, 255]
             elif i == 14 and keep_neck:
                 mask[index[0], index[1], :] = [255, 255, 255]

@@ -1,4 +1,4 @@
-app_title = "ReActor"
+app_title = "ReActor-X"
 version_flag = "v0.7.1-b3"
 
 from scripts.reactor_logger import logger, get_Run, set_Run

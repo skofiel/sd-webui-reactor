@@ -27,7 +27,7 @@ class ColoredFormatter(logging.Formatter):
 
 
 # Create a new logger
-logger = logging.getLogger("ReActor")
+logger = logging.getLogger("ReActor-X")
 logger.propagate = False
 
 # Add Custom Level

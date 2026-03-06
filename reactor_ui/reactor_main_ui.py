@@ -166,8 +166,13 @@ def show(is_img2img: bool, show_br: bool = True, **msgs):
             imgs.clear(clear_faces_list,None,None,show_progress=False)
             mask_face = gr.Checkbox(
                 False,
-                label="Face Mask Correction", 
+                label="Face Mask Correction",
                 info="Apply this option if you see some pixelation around face contours"
+            )
+            mouth_mask = gr.Checkbox(
+                False,
+                label="Mouth Mask",
+                info="Exclude mouth interior from swap (preserves teeth, tongue, objects near mouth). Requires Face Mask Correction"
             )
             gr.Markdown("<br>", visible=show_br)
             gr.Markdown("Source Image (above):")
@@ -226,4 +231,4 @@ def show(is_img2img: bool, show_br: bool = True, **msgs):
     # select_source.select(on_select_source,[save_original],[control_col_1,control_col_2,control_col_3,save_original,imgs_hash_clear],show_progress=False)
     select_source.select(on_select_source,None,[control_col_1,control_col_2,control_col_3,imgs_hash_clear],show_progress=False)
 
-    return img, imgs, selected_tab, select_source, face_model, source_folder, save_original, mask_face, source_faces_index, gender_source, faces_index, gender_target, face_restorer_name, face_restorer_visibility, codeformer_weight, swap_in_source, swap_in_generated, random_image
+    return img, imgs, selected_tab, select_source, face_model, source_folder, save_original, mask_face, mouth_mask, source_faces_index, gender_source, faces_index, gender_target, face_restorer_name, face_restorer_visibility, codeformer_weight, swap_in_source, swap_in_generated, random_image

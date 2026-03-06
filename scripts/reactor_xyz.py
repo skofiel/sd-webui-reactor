@@ -69,10 +69,10 @@ def str_applier(value_name:str):
 
 def add_axis_options(xyz_grid):
     extra_axis_options = [
-        xyz_grid.AxisOption("[ReActor] CodeFormer Weight", float, float_applier("codeformer_weight", 0, 1)),
-        xyz_grid.AxisOption("[ReActor] Restorer Visibility", float, float_applier("restorer_visibility", 0, 1)),
-        xyz_grid.AxisOption("[ReActor] Face Mask Correction", str, bool_applier("mask_face"), choices=choices_bool),
-        xyz_grid.AxisOption("[ReActor] Face Models", str, str_applier("face_model"), choices=choices_face_models),
+        xyz_grid.AxisOption("[ReActor-X] CodeFormer Weight", float, float_applier("codeformer_weight", 0, 1)),
+        xyz_grid.AxisOption("[ReActor-X] Restorer Visibility", float, float_applier("restorer_visibility", 0, 1)),
+        xyz_grid.AxisOption("[ReActor-X] Face Mask Correction", str, bool_applier("mask_face"), choices=choices_bool),
+        xyz_grid.AxisOption("[ReActor-X] Face Models", str, str_applier("face_model"), choices=choices_face_models),
     ]
     set_a = {opt.label for opt in xyz_grid.axis_options}
     set_b = {opt.label for opt in extra_axis_options}
