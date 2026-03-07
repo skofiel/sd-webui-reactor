@@ -376,17 +376,19 @@ def swap_face(
     random_image: bool = False,
     detection_options: Union[DetectionOptions, None] = None,
     mask_engine: str = "BiSeNet",
+    use_occluder: bool = False,
 ):
     global SOURCE_FACES, SOURCE_IMAGE_HASH, TARGET_FACES, TARGET_IMAGE_HASH, PROVIDERS, SOURCE_FACES_LIST, SOURCE_IMAGE_LIST_HASH
 
     with _swap_lock:
-        return _swap_face_impl(source_img, target_img, model, source_faces_index, faces_index, enhancement_options, gender_source, gender_target, source_hash_check, target_hash_check, device, mask_face, mouth_mask, select_source, face_model, source_folder, source_imgs, random_image, detection_options, mask_engine)
+        return _swap_face_impl(source_img, target_img, model, source_faces_index, faces_index, enhancement_options, gender_source, gender_target, source_hash_check, target_hash_check, device, mask_face, mouth_mask, select_source, face_model, source_folder, source_imgs, random_image, detection_options, mask_engine, use_occluder)
 
 def _swap_face_impl(
     source_img, target_img, model, source_faces_index, faces_index,
     enhancement_options, gender_source, gender_target, source_hash_check,
     target_hash_check, device, mask_face, mouth_mask, select_source, face_model,
     source_folder, source_imgs, random_image, detection_options, mask_engine="BiSeNet",
+    use_occluder=False,
 ):
     # Normalize mask_face: bool (legacy) -> int
     if isinstance(mask_face, bool):
@@ -528,7 +530,7 @@ def _swap_face_impl(
                     
                     elif source_face is not None:
 
-                        result_image, output, swapped = operate(source_img_ff[i],target_img,target_img_orig,model,source_faces_index,faces_index,source_faces,target_faces,gender_source,gender_target,source_face,wrong_gender,source_age,source_gender,output,swapped,mask_face,mouth_mask,entire_mask_image,enhancement_options,detection_options,mask_engine)
+                        result_image, output, swapped = operate(source_img_ff[i],target_img,target_img_orig,model,source_faces_index,faces_index,source_faces,target_faces,gender_source,gender_target,source_face,wrong_gender,source_age,source_gender,output,swapped,mask_face,mouth_mask,entire_mask_image,enhancement_options,detection_options,mask_engine,use_occluder)
 
                         result.append(result_image)
 
@@ -637,7 +639,7 @@ def _swap_face_impl(
                 
                 elif source_face is not None:
 
-                    result_image, output, swapped = operate(source_img,target_img,target_img_orig,model,source_faces_index,faces_index,source_faces,target_faces,gender_source,gender_target,source_face,wrong_gender,source_age,source_gender,output,swapped,mask_face,mouth_mask,entire_mask_image,enhancement_options,detection_options,mask_engine)
+                    result_image, output, swapped = operate(source_img,target_img,target_img_orig,model,source_faces_index,faces_index,source_faces,target_faces,gender_source,gender_target,source_face,wrong_gender,source_age,source_gender,output,swapped,mask_face,mouth_mask,entire_mask_image,enhancement_options,detection_options,mask_engine,use_occluder)
                 
                 else:
                     logger.status("No source face(s) in the provided Index")
@@ -771,6 +773,7 @@ def operate(
         enhancement_options,
         detection_options,
         mask_engine="BiSeNet",
+        use_occluder=False,
     ):
     result = target_img
     face_swapper = getFaceSwapModel(model)
@@ -806,7 +809,7 @@ def operate(
                 swapped_image = face_swapper.get(result, target_face, source_face)
                                         
                 if mask_face:
-                    result = apply_face_mask(swapped_image=swapped_image,target_image=result,target_face=target_face,entire_mask_image=entire_mask_image,mouth_mask=mouth_mask,mask_face_mode=mask_face,mask_engine=mask_engine)
+                    result = apply_face_mask(swapped_image=swapped_image,target_image=result,target_face=target_face,entire_mask_image=entire_mask_image,mouth_mask=mouth_mask,mask_face_mode=mask_face,mask_engine=mask_engine,use_occluder=use_occluder)
                 else:
                     result = swapped_image
                 swapped += 1

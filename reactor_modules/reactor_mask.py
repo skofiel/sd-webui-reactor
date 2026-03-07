@@ -1,3 +1,5 @@
+import os
+
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw
@@ -8,6 +10,7 @@ from scripts.reactor_logger import logger
 from scripts.reactor_inferencers.bisenet_mask_generator import BiSeNetMaskGenerator
 from scripts.reactor_entities.face import FaceArea
 from scripts.reactor_entities.rect import Rect
+from scripts.reactor_globals import BASE_PATH
 
 
 def _get_mask_generator(mask_engine: str = "BiSeNet"):
@@ -168,7 +171,7 @@ def _compute_adaptive_params(scene: dict, edge_contrast: float, face_size: int, 
     }
 
 
-def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face,entire_mask_image:np.array,mouth_mask:bool=False,mask_face_mode:int=1,mask_engine:str="BiSeNet")->np.ndarray:
+def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face,entire_mask_image:np.array,mouth_mask:bool=False,mask_face_mode:int=1,mask_engine:str="BiSeNet",use_occluder:bool=False)->np.ndarray:
     logger.status("Correcting Face Mask%s [%s]", " (Extended)" if mask_face_mode == 2 else "", mask_engine)
     mask_generator = _get_mask_generator(mask_engine)
     face = FaceArea(target_image,Rect.from_ndarray(np.array(target_face.bbox)),1.6,512,"")
@@ -185,6 +188,20 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
         mask_size=0,
         use_minimal_area=True
     )
+
+    # Occlusion detection: subtract occluded regions from the mask
+    if use_occluder:
+        try:
+            from reactor_modules.reactor_occluder import detect_occlusion
+            occluder_model_path = os.path.join(BASE_PATH, "models", "occluder.onnx")
+            if os.path.exists(occluder_model_path):
+                logger.status("Applying Occlusion Detection")
+                occlusion_mask = detect_occlusion(face_image, occluder_model_path)
+                mask[occlusion_mask > 127] = 0
+            else:
+                logger.warning("Occluder model not found at %s, skipping occlusion detection", occluder_model_path)
+        except Exception as e:
+            logger.warning("Occlusion detection failed: %s", e)
 
     face_size = max(face.width, face.height)
 
