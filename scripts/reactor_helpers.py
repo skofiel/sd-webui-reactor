@@ -177,15 +177,19 @@ def save_face_model(face: Face, filename: str) -> None:
 
 def get_models():
     global MODELS_PATH
-    models_path_init = os.path.join(models_path, "insightface/*")
+    insightface_dir = os.path.join(models_path, "insightface")
+    models_path_init = os.path.join(insightface_dir, "*")
     models = glob.glob(models_path_init)
+    # Also search reswapper subdirectory (ReActor ComfyUI convention)
+    reswapper_dir = os.path.join(insightface_dir, "reswapper", "*")
+    models += glob.glob(reswapper_dir)
     models = [x for x in models if x.endswith(".onnx") or x.endswith(".pth")]
     models_names = []
     for model in models:
-        model_path = os.path.split(model)
         if MODELS_PATH is None:
-            MODELS_PATH = model_path[0]
-        model_name = model_path[1]
+            MODELS_PATH = insightface_dir
+        # Use path relative to insightface dir so subdirectory models load correctly
+        model_name = os.path.relpath(model, insightface_dir)
         models_names.append(model_name)
     return models_names
 

@@ -30,7 +30,7 @@ def patched_get_model(self, **kwargs):
         return Landmark(model_file=self.onnx_file, session=session)
     elif input_shape[2] == 96 and input_shape[3] == 96:
         return Attribute(model_file=self.onnx_file, session=session)
-    elif len(inputs) == 2 and input_shape[2] == 128 and input_shape[3] == 128:
+    elif len(inputs) == 2 and input_shape[2] == input_shape[3] and input_shape[2] in (128, 256):
         return INSwapper(model_file=self.onnx_file, session=session)
     elif input_shape[2] == input_shape[3] and input_shape[2] >= 112 and input_shape[2] % 16 == 0:
         return ArcFaceONNX(model_file=self.onnx_file, session=session)
