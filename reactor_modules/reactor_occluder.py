@@ -45,7 +45,8 @@ def detect_occlusion(
     model_path : str
         Absolute path to occluder.onnx.
     threshold : float
-        Probability threshold above which a pixel is considered occluded (default 0.5).
+        Face-visibility probability threshold. Pixels with probability *below*
+        this value are considered occluded (default 0.5).
     dilate_kernel : int
         Kernel size for dilation (safety margin). Default 5.
     dilate_iterations : int
@@ -70,14 +71,18 @@ def detect_occlusion(
     input_name = session.get_inputs()[0].name
     output = session.run(None, {input_name: blob})
 
-    # The model outputs a probability map; squeeze to 2D
-    prob_map = output[0].squeeze()
-    if prob_map.ndim == 3:
-        # If multi-channel, take the occlusion channel (last one)
-        prob_map = prob_map[-1]
+    # The model outputs logits (not probabilities); squeeze to 2D
+    logits = output[0].squeeze()
+    if logits.ndim == 3:
+        # If multi-channel, take the last channel
+        logits = logits[-1]
 
-    # Binarize
-    occlusion_mask = (prob_map > threshold).astype(np.uint8) * 255
+    # Convert logits to probabilities via sigmoid
+    prob_map = 1.0 / (1.0 + np.exp(-logits.astype(np.float64)))
+
+    # The model marks visible face regions with high probability.
+    # Occluded pixels are where face probability is BELOW threshold.
+    occlusion_mask = (prob_map < threshold).astype(np.uint8) * 255
 
     # Dilate for safety margin
     if dilate_kernel > 0 and dilate_iterations > 0:
