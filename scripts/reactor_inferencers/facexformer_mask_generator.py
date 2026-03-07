@@ -85,7 +85,7 @@ class FaceXFormerMaskGenerator(MaskGenerator):
 
             class_map = results['faceparsing_mask']
             if not isinstance(class_map, np.ndarray):
-                class_map = np.array(class_map)
+                class_map = np.array(class_map.cpu() if hasattr(class_map, "cpu") else class_map)
             class_map = class_map.astype(np.uint8)
 
             # Store extra analysis data for Extended mode
@@ -137,7 +137,7 @@ class FaceXFormerMaskGenerator(MaskGenerator):
 
             class_map = results['faceparsing_mask']
             if not isinstance(class_map, np.ndarray):
-                class_map = np.array(class_map)
+                class_map = np.array(class_map.cpu() if hasattr(class_map, "cpu") else class_map)
 
             # Store extra data for Extended mode
             self.last_analysis = {

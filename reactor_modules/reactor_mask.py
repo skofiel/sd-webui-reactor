@@ -151,16 +151,21 @@ def _compute_adaptive_params(scene: dict, edge_contrast: float, face_size: int, 
         headpose = extra_analysis.get('headpose')
         if headpose is not None:
             try:
-                yaw = abs(float(headpose[0])) if hasattr(headpose, '__getitem__') else 0
-                # Extreme profile angles: reduce seamless clone aggressiveness
-                if yaw > 30:
-                    use_seamless = False
-                    logger.info("Extended mask - headpose yaw=%.1f, disabling seamlessClone", yaw)
-                # Moderate angles: increase blur for smoother transition
-                if yaw > 15:
-                    kernel_size = max(kernel_size, base_kernel + 3)
-            except (TypeError, IndexError, ValueError):
-                pass
+                if isinstance(headpose, dict):
+                    yaw = abs(float(headpose.get('yaw', headpose.get(0, 0))))
+                elif hasattr(headpose, '__getitem__'):
+                    yaw = abs(float(headpose[0]))
+                else:
+                    yaw = abs(float(headpose))
+            except (TypeError, IndexError, ValueError, KeyError):
+                yaw = 0
+            # Extreme profile angles: reduce seamless clone aggressiveness
+            if yaw > 30:
+                use_seamless = False
+                logger.info("Extended mask - headpose yaw=%.1f, disabling seamlessClone", yaw)
+            # Moderate angles: increase blur for smoother transition
+            if yaw > 15:
+                kernel_size = max(kernel_size, base_kernel + 3)
 
     return {
         "erosion": erosion,
