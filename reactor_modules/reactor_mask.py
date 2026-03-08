@@ -133,7 +133,8 @@ def _compute_adaptive_params(scene: dict, edge_contrast: float, face_size: int, 
         erosion = max(erosion, 2)
 
     # Blur kernel: larger when edge contrast is high
-    base_kernel = max(5, int(face_size * 0.03))
+    # Reduced from 0.03 since gradient mask handles transition zones
+    base_kernel = max(5, int(face_size * 0.02))
     contrast_boost = int(edge_contrast * 10)
     kernel_size = base_kernel + contrast_boost
     if kernel_size % 2 == 0:
@@ -174,6 +175,97 @@ def _compute_adaptive_params(scene: dict, edge_contrast: float, face_size: int, 
         "apply_color": apply_color,
         "use_seamless": use_seamless,
     }
+
+
+def _build_gradient_mask(binary_mask: np.ndarray, bisenet_classes: np.ndarray, face_size: int) -> np.ndarray:
+    """Transform a binary face mask into a gradient mask with soft transition zones.
+
+    Uses semantic class labels (hair, neck, background) to create smooth falloff
+    at face boundaries instead of hard edges. The face interior stays fully opaque
+    while borders fade gradually into adjacent regions.
+    """
+    # Work in single channel
+    if len(binary_mask.shape) == 3:
+        mask_gray = cv2.cvtColor(binary_mask, cv2.COLOR_BGR2GRAY)
+    else:
+        mask_gray = binary_mask.copy()
+
+    # Resize class map to match mask dimensions
+    if bisenet_classes.shape[:2] != mask_gray.shape[:2]:
+        bisenet_classes = cv2.resize(
+            bisenet_classes, (mask_gray.shape[1], mask_gray.shape[0]),
+            interpolation=cv2.INTER_NEAREST
+        )
+
+    # Binary face mask for distance transform
+    face_binary = (mask_gray > 127).astype(np.uint8)
+
+    # Distance from face edge into non-face regions
+    inv_face = (1 - face_binary).astype(np.uint8)
+    if inv_face.max() == 0:
+        # Entire image is face — nothing to gradient
+        return binary_mask
+    dist_from_face = cv2.distanceTransform(inv_face, cv2.DIST_L2, 5)
+
+    # Transition radii proportional to face size
+    hair_radius = max(8, int(face_size * 0.06))
+    chin_radius = max(6, int(face_size * 0.045))
+    brow_radius = max(4, int(face_size * 0.03))
+
+    # Semantic regions
+    is_hair = (bisenet_classes == 17)
+    is_neck = (bisenet_classes == 14)
+    is_background = (bisenet_classes == 0)
+
+    # Vertical centroid for separating brow (above) from chin (below)
+    face_ys = np.where(face_binary > 0)[0]
+    if len(face_ys) > 0:
+        face_centroid_y = int(np.mean(face_ys))
+    else:
+        face_centroid_y = mask_gray.shape[0] // 2
+
+    row_indices = np.arange(mask_gray.shape[0])[:, np.newaxis]
+    row_indices = np.broadcast_to(row_indices, mask_gray.shape[:2])
+
+    # Hairline transition: hair pixels near face edge
+    hair_zone = is_hair & (dist_from_face > 0) & (dist_from_face < hair_radius)
+    hair_alpha = np.zeros_like(mask_gray, dtype=np.float32)
+    if hair_zone.any():
+        hair_alpha[hair_zone] = 1.0 - (dist_from_face[hair_zone] / hair_radius)
+
+    # Chin/jaw transition: neck or background below centroid, near face edge
+    below_centroid = (row_indices > face_centroid_y)
+    chin_candidates = (is_neck | (is_background & below_centroid))
+    chin_zone = chin_candidates & (dist_from_face > 0) & (dist_from_face < chin_radius)
+    chin_alpha = np.zeros_like(mask_gray, dtype=np.float32)
+    if chin_zone.any():
+        chin_alpha[chin_zone] = 1.0 - (dist_from_face[chin_zone] / chin_radius)
+
+    # Eyebrow top transition: background or hair above centroid, near face edge
+    above_centroid = (row_indices < face_centroid_y)
+    brow_candidates = ((is_background | is_hair) & above_centroid)
+    brow_zone = brow_candidates & (dist_from_face > 0) & (dist_from_face < brow_radius)
+    brow_alpha = np.zeros_like(mask_gray, dtype=np.float32)
+    if brow_zone.any():
+        brow_alpha[brow_zone] = 1.0 - (dist_from_face[brow_zone] / brow_radius)
+
+    # Combine: face interior at full opacity, transitions add gradient outward
+    combined = mask_gray.astype(np.float32) / 255.0
+    combined = np.maximum(combined, hair_alpha)
+    combined = np.maximum(combined, chin_alpha)
+    combined = np.maximum(combined, brow_alpha)
+
+    result_gray = np.clip(combined * 255, 0, 255).astype(np.uint8)
+
+    # Preserve mouth exclusion: zeros inside the face region must stay zero
+    dilated_face = cv2.dilate(face_binary, np.ones((3, 3), np.uint8), iterations=1)
+    interior_holes = (mask_gray == 0) & (dilated_face > 0)
+    result_gray[interior_holes] = 0
+
+    # Convert back to 3-channel if needed
+    if len(binary_mask.shape) == 3:
+        return cv2.cvtColor(result_gray, cv2.COLOR_GRAY2BGR)
+    return result_gray
 
 
 def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face,entire_mask_image:np.array,mouth_mask:bool=False,mask_face_mode:int=1,mask_engine:str="BiSeNet",use_occluder:bool=False)->np.ndarray:
@@ -239,6 +331,9 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
             ek = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (params["erosion"], params["erosion"]))
             mask = cv2.erode(mask, ek, iterations=1)
 
+        # Build gradient transition zones at hair, chin, and brow boundaries
+        mask = _build_gradient_mask(mask, bisenet_classes, face_size)
+
         # Apply blur (Gaussian for Extended)
         ks = params["kernel_size"]
         if ks % 2 == 0:
@@ -281,8 +376,16 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
         return np.array(result)
 
     else:
-        # === STANDARD MODE (Yes): original behavior ===
-        kernel_size = max(5, int(face_size * 0.03))
+        # === STANDARD MODE (Yes) ===
+        # Get cached classes from generate_mask or fetch fresh
+        bisenet_classes = mask_generator.get_cached_classes()
+        if bisenet_classes is None:
+            bisenet_classes = mask_generator.get_raw_classes(face_image, face_area_on_image)
+
+        # Build gradient transition zones at hair, chin, and brow boundaries
+        mask = _build_gradient_mask(mask, bisenet_classes, face_size)
+
+        kernel_size = max(5, int(face_size * 0.025))
         mask = cv2.blur(mask, (kernel_size, kernel_size))
 
         larger_mask = cv2.resize(mask, dsize=(face.width, face.height))

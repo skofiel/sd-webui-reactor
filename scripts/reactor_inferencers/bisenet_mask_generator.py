@@ -12,6 +12,7 @@ from scripts.reactor_inferencers.mask_generator import MaskGenerator
 class BiSeNetMaskGenerator(MaskGenerator):
     def __init__(self) -> None:
         self.mask_model = init_parsing_model(device=shared.device)
+        self._last_classes = None
 
     def name(self):
         return "BiSeNet"
@@ -48,6 +49,7 @@ class BiSeNetMaskGenerator(MaskGenerator):
             face = self.mask_model(face_tensor)[0]
         face = face.squeeze(0).cpu().numpy().argmax(0)
         face = face.copy().astype(np.uint8)
+        self._last_classes = face.copy()
 
         mask = self.__to_mask(face, affected_areas)
         
@@ -64,6 +66,9 @@ class BiSeNetMaskGenerator(MaskGenerator):
         #     )"""
        
         return mask
+
+    def get_cached_classes(self):
+        return self._last_classes
 
     def get_raw_classes(
         self,
