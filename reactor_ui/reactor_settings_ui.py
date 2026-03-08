@@ -76,9 +76,14 @@ def show(hash_check_block: bool = True):
             )
         gr.Markdown("<br>")
         mask_engine = gr.Radio(
-            ["BiSeNet", "FaRL"],
+            ["BiSeNet", "FaRL", "FaceXFormer"],
             value="BiSeNet",
             label="Mask Engine",
-            info="BiSeNet = default (fast). FaRL = higher precision face boundaries (downloads ~350MB on first use)"
+            info="BiSeNet = default. FaRL = higher precision boundaries. FaceXFormer = best precision + headpose/visibility (~10ms FP16)"
         )
-    return model, device, console_logging_level, source_hash_check, target_hash_check, mask_engine
+        use_occluder = gr.Checkbox(
+            False,
+            label="Occlusion Detection",
+            info="Detect and exclude occluded face regions (glasses, hands, hair over face). Requires Face Mask Correction and occluder.onnx model"
+        )
+    return model, device, console_logging_level, source_hash_check, target_hash_check, mask_engine, use_occluder
