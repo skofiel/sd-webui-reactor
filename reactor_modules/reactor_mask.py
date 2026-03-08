@@ -210,7 +210,7 @@ def _build_gradient_mask(binary_mask: np.ndarray, bisenet_classes: np.ndarray, f
     # Transition radii proportional to face size
     hair_radius = max(8, int(face_size * 0.06))
     chin_radius = max(6, int(face_size * 0.045))
-    brow_radius = max(4, int(face_size * 0.03))
+    brow_radius = max(6, int(face_size * 0.045))
 
     # Semantic regions
     is_hair = (bisenet_classes == 17)
@@ -266,6 +266,42 @@ def _build_gradient_mask(binary_mask: np.ndarray, bisenet_classes: np.ndarray, f
     if len(binary_mask.shape) == 3:
         return cv2.cvtColor(result_gray, cv2.COLOR_GRAY2BGR)
     return result_gray
+
+
+def _protect_eye_regions(mask: np.ndarray, bisenet_classes: np.ndarray, face_size: int) -> np.ndarray:
+    """Ensure eye regions are fully included in the mask to prevent split-eye artifacts.
+
+    Extracts eye pixels from semantic classes (4=left eye, 5=right eye), dilates them
+    with a safety margin, and forces those pixels to 255 in the mask. This prevents the
+    mask boundary from cutting through an eye after erosion, gradient, or blur steps.
+    Works with all engines (BiSeNet, FaRL, FaceXFormer) since they all use classes 4,5.
+    """
+    if len(mask.shape) == 3:
+        mask_gray = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+    else:
+        mask_gray = mask.copy()
+
+    if bisenet_classes.shape[:2] != mask_gray.shape[:2]:
+        bisenet_classes = cv2.resize(
+            bisenet_classes, (mask_gray.shape[1], mask_gray.shape[0]),
+            interpolation=cv2.INTER_NEAREST
+        )
+
+    eye_region = ((bisenet_classes == 4) | (bisenet_classes == 5)).astype(np.uint8) * 255
+    if eye_region.max() == 0:
+        return mask
+
+    dilation_size = max(5, int(face_size * 0.04))
+    if dilation_size % 2 == 0:
+        dilation_size += 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilation_size, dilation_size))
+    dilated_eyes = cv2.dilate(eye_region, kernel, iterations=1)
+
+    mask_gray[dilated_eyes > 0] = 255
+
+    if len(mask.shape) == 3:
+        return cv2.cvtColor(mask_gray, cv2.COLOR_GRAY2BGR)
+    return mask_gray
 
 
 def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face,entire_mask_image:np.array,mouth_mask:bool=False,mask_face_mode:int=1,mask_engine:str="BiSeNet",use_occluder:bool=False)->np.ndarray:
@@ -331,6 +367,9 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
             ek = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (params["erosion"], params["erosion"]))
             mask = cv2.erode(mask, ek, iterations=1)
 
+        # Protect eye regions from being split by erosion or gradient
+        mask = _protect_eye_regions(mask, bisenet_classes, face_size)
+
         # Build gradient transition zones at hair, chin, and brow boundaries
         mask = _build_gradient_mask(mask, bisenet_classes, face_size)
 
@@ -381,6 +420,9 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
         bisenet_classes = mask_generator.get_cached_classes()
         if bisenet_classes is None:
             bisenet_classes = mask_generator.get_raw_classes(face_image, face_area_on_image)
+
+        # Protect eye regions from being split by gradient or blur
+        mask = _protect_eye_regions(mask, bisenet_classes, face_size)
 
         # Build gradient transition zones at hair, chin, and brow boundaries
         mask = _build_gradient_mask(mask, bisenet_classes, face_size)
