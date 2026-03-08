@@ -49,6 +49,7 @@ class FaceXFormerMaskGenerator(MaskGenerator):
     def __init__(self) -> None:
         # Store last analysis results for Extended mode to use
         self.last_analysis = None
+        self._last_classes = None
 
     def name(self):
         return "FaceXFormer"
@@ -87,6 +88,7 @@ class FaceXFormerMaskGenerator(MaskGenerator):
             if not isinstance(class_map, np.ndarray):
                 class_map = np.array(class_map.cpu() if hasattr(class_map, "cpu") else class_map)
             class_map = class_map.astype(np.uint8)
+            self._last_classes = class_map.copy()
 
             # Store extra analysis data for Extended mode
             self.last_analysis = {
@@ -115,6 +117,9 @@ class FaceXFormerMaskGenerator(MaskGenerator):
             return fallback.generate_mask(
                 face_image, face_area_on_image, affected_areas, mask_size, use_minimal_area, fallback_ratio
             )
+
+    def get_cached_classes(self):
+        return self._last_classes
 
     def get_raw_classes(
         self,

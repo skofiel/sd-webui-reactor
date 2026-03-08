@@ -51,9 +51,41 @@ def _get_farl_models(device):
         raise
 
 
+# Mapping from FaRL classes to BiSeNet-equivalent IDs
+FARL_TO_BISENET = {
+    0: 0,   # background
+    1: 14,  # neck
+    2: 1,   # face/skin
+    3: 0,   # cloth -> background
+    4: 7,   # right ear
+    5: 8,   # left ear
+    6: 2,   # right brow
+    7: 3,   # left brow
+    8: 4,   # right eye
+    9: 5,   # left eye
+    10: 10, # nose
+    11: 11, # inner mouth
+    12: 13, # lower lip
+    13: 12, # upper lip
+    14: 17, # hair
+    15: 6,  # eyeglasses
+    16: 18, # hat
+    17: 9,  # earring
+    18: 0,  # necklace -> background
+}
+
+
+def _map_farl_to_bisenet(class_map: np.ndarray) -> np.ndarray:
+    mapped = np.zeros_like(class_map)
+    for farl_cls, bisenet_cls in FARL_TO_BISENET.items():
+        mapped[class_map == farl_cls] = bisenet_cls
+    return mapped
+
+
 class FaRLMaskGenerator(MaskGenerator):
     def __init__(self) -> None:
         self._device = shared.device
+        self._last_classes = None
 
     def name(self):
         return "FaRL"
@@ -105,6 +137,7 @@ class FaRLMaskGenerator(MaskGenerator):
 
             # Use first detected face
             class_map = seg_map[0].cpu().numpy().astype(np.uint8)
+            self._last_classes = _map_farl_to_bisenet(class_map)
 
             mask = self.__to_mask(class_map, affected_areas)
 
@@ -125,6 +158,9 @@ class FaRLMaskGenerator(MaskGenerator):
             return fallback.generate_mask(
                 face_image, face_area_on_image, affected_areas, mask_size, use_minimal_area, fallback_ratio
             )
+
+    def get_cached_classes(self):
+        return self._last_classes
 
     def get_raw_classes(
         self,
@@ -157,37 +193,7 @@ class FaRLMaskGenerator(MaskGenerator):
             seg_map = seg_logits.softmax(dim=1).argmax(dim=1)
             class_map = seg_map[0].cpu().numpy().astype(np.uint8)
 
-            # Map FaRL classes to BiSeNet-equivalent for _analyze_scene compatibility:
-            # BiSeNet: 1=skin, 2-3=brows, 4-5=eyes, 6=glasses, 7-8=ears, 9=earring,
-            #          10=nose, 11=mouth, 12=ulip, 13=llip, 14=neck, 17=hair, 18=hat
-            # FaRL:    2=skin, 6-7=brows, 8-9=eyes, 15=glasses, 4-5=ears, 17=earring,
-            #          10=nose, 11=mouth, 12=llip, 13=ulip, 1=neck, 14=hair, 16=hat
-            farl_to_bisenet = {
-                0: 0,   # background
-                1: 14,  # neck
-                2: 1,   # face/skin
-                3: 0,   # cloth -> background
-                4: 7,   # right ear
-                5: 8,   # left ear
-                6: 2,   # right brow
-                7: 3,   # left brow
-                8: 4,   # right eye
-                9: 5,   # left eye
-                10: 10, # nose
-                11: 11, # inner mouth
-                12: 13, # lower lip
-                13: 12, # upper lip
-                14: 17, # hair
-                15: 6,  # eyeglasses
-                16: 18, # hat
-                17: 9,  # earring
-                18: 0,  # necklace -> background
-            }
-            mapped = np.zeros_like(class_map)
-            for farl_cls, bisenet_cls in farl_to_bisenet.items():
-                mapped[class_map == farl_cls] = bisenet_cls
-
-            return mapped
+            return _map_farl_to_bisenet(class_map)
 
         except Exception as e:
             logger.warning("FaRL get_raw_classes failed: %s. Falling back to BiSeNet.", e)

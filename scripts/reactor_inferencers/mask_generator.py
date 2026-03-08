@@ -18,6 +18,10 @@ class MaskGenerator(ABC):
     ) -> np.ndarray:
         pass
 
+    def get_cached_classes(self):
+        """Return cached class labels from last generate_mask call, or None."""
+        return None
+
     @staticmethod
     def mask_non_face_areas(image: np.ndarray, face_area_on_image: Tuple[int, int, int, int]) -> np.ndarray:
         left, top, right, bottom = face_area_on_image
