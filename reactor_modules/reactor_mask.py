@@ -1,4 +1,5 @@
 import os
+import sys
 
 import cv2
 import numpy as np
@@ -7,6 +8,8 @@ from PIL import Image, ImageDraw
 from torchvision.transforms.functional import to_pil_image
 
 from scripts.reactor_logger import logger
+
+_DEBUG_DIR = "/home/skofiel/stable-diffusion-webui-forge/tmp"
 from scripts.reactor_inferencers.bisenet_mask_generator import BiSeNetMaskGenerator
 from scripts.reactor_entities.face import FaceArea
 from scripts.reactor_entities.rect import Rect
@@ -389,17 +392,18 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
 
         # DEBUG: save gradient mask (before blur) and final mask (after blur)
         try:
+            os.makedirs(_DEBUG_DIR, exist_ok=True)
             _debug_grad_full = np.zeros_like(entire_mask_image)
             _debug_grad_resized = cv2.resize(mask if len(mask.shape) == 2 else cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY),
                                               dsize=(face.width, face.height))
             _debug_grad_full[face.top:face.bottom, face.left:face.right] = _debug_grad_resized
-            cv2.imwrite("/tmp/debug_mask_gradient.png", _debug_grad_full)
-            cv2.imwrite("/tmp/debug_mask_final.png", entire_mask_image)
-            cv2.imwrite("/tmp/debug_swapped.png", swapped_image)
-            cv2.imwrite("/tmp/debug_target.png", target_image)
-            logger.info("DEBUG: saved debug images to /tmp/")
+            cv2.imwrite(os.path.join(_DEBUG_DIR, "debug_mask_gradient.png"), _debug_grad_full)
+            cv2.imwrite(os.path.join(_DEBUG_DIR, "debug_mask_final.png"), entire_mask_image)
+            cv2.imwrite(os.path.join(_DEBUG_DIR, "debug_swapped.png"), swapped_image)
+            cv2.imwrite(os.path.join(_DEBUG_DIR, "debug_target.png"), target_image)
+            sys.stderr.write(f"[ReActor DEBUG] saved debug images to {_DEBUG_DIR}/ (extended mode, blur_k={blur_k}, face={face.width}x{face.height})\n")
         except Exception as e:
-            logger.warning("DEBUG save failed: %s", e)
+            sys.stderr.write(f"[ReActor DEBUG] save failed: {e}\n")
 
         # Color correction
         if params["apply_color"]:
@@ -437,17 +441,18 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
 
         # DEBUG: save debug images
         try:
+            os.makedirs(_DEBUG_DIR, exist_ok=True)
             _debug_grad_full = np.zeros(entire_mask_image.shape[:2], dtype=np.uint8)
             _debug_grad_resized = cv2.resize(mask if len(mask.shape) == 2 else cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY),
                                               dsize=(face.width, face.height))
             _debug_grad_full[face.top:face.bottom, face.left:face.right] = _debug_grad_resized
-            cv2.imwrite("/tmp/debug_mask_gradient.png", _debug_grad_full)
-            cv2.imwrite("/tmp/debug_mask_final.png", entire_mask_image)
-            cv2.imwrite("/tmp/debug_swapped.png", swapped_image)
-            cv2.imwrite("/tmp/debug_target.png", target_image)
-            logger.info("DEBUG: saved debug images to /tmp/ (standard mode)")
+            cv2.imwrite(os.path.join(_DEBUG_DIR, "debug_mask_gradient.png"), _debug_grad_full)
+            cv2.imwrite(os.path.join(_DEBUG_DIR, "debug_mask_final.png"), entire_mask_image)
+            cv2.imwrite(os.path.join(_DEBUG_DIR, "debug_swapped.png"), swapped_image)
+            cv2.imwrite(os.path.join(_DEBUG_DIR, "debug_target.png"), target_image)
+            sys.stderr.write(f"[ReActor DEBUG] saved debug images to {_DEBUG_DIR}/ (standard mode, blur_k={blur_k}, face={face.width}x{face.height})\n")
         except Exception as e:
-            logger.warning("DEBUG save failed: %s", e)
+            sys.stderr.write(f"[ReActor DEBUG] save failed: {e}\n")
 
         result = Image.composite(
             Image.fromarray(swapped_image), Image.fromarray(target_image),
