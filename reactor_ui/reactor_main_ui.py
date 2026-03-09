@@ -86,12 +86,12 @@ def show(is_img2img: bool, show_br: bool = True, **msgs):
             with gr.Row():
                 select_source = gr.Radio(
                     ["Image(s)","Face Model","Folder"],
-                    value="Image(s)",
+                    value="Face Model",
                     label="Select Source",
                     type="index",
                     scale=1,
                 )
-                with gr.Column(visible=False) as control_col_2:
+                with gr.Column(visible=True) as control_col_2:
                     with gr.Row():
                         face_models = get_model_names(get_facemodels)
                         face_model = gr.Dropdown(
@@ -116,7 +116,7 @@ def show(is_img2img: bool, show_br: bool = True, **msgs):
                 )
                 imgs_hash_clear.click(clear_faces_list,None,[progressbar_area])
             gr.Markdown("<br>", visible=show_br)
-            with gr.Column(visible=True) as control_col_1:
+            with gr.Column(visible=False) as control_col_1:
                 with gr.Row():
                     selected_tab = gr.Textbox('tab_single', visible=False)
                     with gr.Tabs() as tab_single:
@@ -166,7 +166,7 @@ def show(is_img2img: bool, show_br: bool = True, **msgs):
             imgs.clear(clear_faces_list,None,None,show_progress=False)
             mask_face = gr.Radio(
                 ["No", "Yes", "Extended"],
-                value="No",
+                value="Extended",
                 label="Face Mask Correction",
                 type="index",
                 info="'Yes' = standard mask correction; 'Extended' = adaptive blending with auto color correction and seamless clone"
@@ -217,7 +217,7 @@ def show(is_img2img: bool, show_br: bool = True, **msgs):
                         0, 1, 1, step=0.1, label="Restore Face Visibility"
                     )
                     codeformer_weight = gr.Slider(
-                        0, 1, 0.5, step=0.1, label="CodeFormer Weight (Fidelity)", info="0 = far from original (max restoration), 1 = close to original (min restoration)"
+                        0, 1, 1, step=0.1, label="CodeFormer Weight (Fidelity)", info="0 = far from original (max restoration), 1 = close to original (min restoration)"
                     )
             gr.Markdown("<br>", visible=show_br)
             swap_in_source = gr.Checkbox(

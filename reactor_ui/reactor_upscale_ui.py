@@ -40,7 +40,7 @@ def show(show_br: bool = True):
         )
         gr.Markdown("<br>", visible=show_br)
         with gr.Row():
-            upscaler_scale = gr.Slider(1, 8, 1, step=0.1, label="Scale by")
+            upscaler_scale = gr.Slider(1, 8, 2, step=0.1, label="Scale by")
             upscaler_visibility = gr.Slider(
                 0, 1, 1, step=0.1, label="Upscaler Visibility (if scale = 1)"
             )

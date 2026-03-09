@@ -232,15 +232,30 @@ def enhance_image_and_mask(image: Image.Image, enhancement_options: EnhancementO
         return result_image
     
     if enhancement_options.do_restore_first:
-        
+
         result_image = restore_face(result_image, enhancement_options)
+        # Blur the mask to create soft transitions (matching apply_face_mask behavior)
+        mask_arr = np.array(entire_mask_image.convert('L'))
+        h, w = mask_arr.shape[:2]
+        blur_k = max(11, int(max(w, h) * 0.02))
+        if blur_k % 2 == 0:
+            blur_k += 1
+        mask_arr = cv2.GaussianBlur(mask_arr, (blur_k, blur_k), 0)
+        entire_mask_image = Image.fromarray(mask_arr).convert('L')
         result_image = Image.composite(result_image,target_img_orig,entire_mask_image)
         result_image = upscale_image(result_image, enhancement_options)
 
     else:
 
         result_image = upscale_image(result_image, enhancement_options)
-        entire_mask_image = Image.fromarray(cv2.resize(np.array(entire_mask_image),result_image.size, interpolation=cv2.INTER_AREA)).convert("L")
+        mask_arr = cv2.resize(np.array(entire_mask_image), result_image.size, interpolation=cv2.INTER_AREA)
+        if len(mask_arr.shape) == 3:
+            mask_arr = cv2.cvtColor(mask_arr, cv2.COLOR_BGR2GRAY)
+        blur_k = max(11, int(max(mask_arr.shape) * 0.02))
+        if blur_k % 2 == 0:
+            blur_k += 1
+        mask_arr = cv2.GaussianBlur(mask_arr, (blur_k, blur_k), 0)
+        entire_mask_image = Image.fromarray(mask_arr).convert("L")
         result_image = Image.composite(result_image,target_img_orig,entire_mask_image)
         result_image = restore_face(result_image, enhancement_options)
 
@@ -751,29 +766,20 @@ def blend_faces(images_list: List, name: str, compute_method: int = 0, shape_che
 
 
 def _paste_back_minimal_erosion(bgr_fake: np.ndarray, M: np.ndarray, target_img: np.ndarray) -> np.ndarray:
-    """Warp the raw swapped face back onto the target image with minimal erosion.
+    """Warp the raw swapped face back onto the target image without erosion.
 
     Unlike INSwapper's internal paste_back which erodes ~10% of mask size
-    (cutting into eyes on angled faces), this uses ~2.5% erosion — just enough
-    to clean warp border artifacts without losing facial features.
+    (cutting into eyes on angled faces), this uses NO erosion — only a light
+    Gaussian blur for anti-aliasing at warp edges. The semantic mask from
+    apply_face_mask() handles all boundary control.
     """
     IM = cv2.invertAffineTransform(M)
     h, w = target_img.shape[:2]
     bgr_fake_warped = cv2.warpAffine(bgr_fake, IM, (w, h), borderValue=0.0)
     img_white = np.full((bgr_fake.shape[0], bgr_fake.shape[1]), 255, dtype=np.float32)
     img_white_warped = cv2.warpAffine(img_white, IM, (w, h), borderValue=0.0)
-    img_white_warped[img_white_warped > 20] = 255
-    mask_h_inds, mask_w_inds = np.where(img_white_warped == 255)
-    if len(mask_h_inds) == 0:
-        return target_img
-    mask_size = int(np.sqrt((np.max(mask_h_inds) - np.min(mask_h_inds)) * (np.max(mask_w_inds) - np.min(mask_w_inds))))
-    k = max(mask_size // 40, 3)
-    kernel = np.ones((k, k), np.uint8)
-    img_white_warped = cv2.erode(img_white_warped, kernel, iterations=1)
-    k = max(mask_size // 40, 3)
-    blur_size = tuple(2 * i + 1 for i in (k, k))
-    img_white_warped = cv2.GaussianBlur(img_white_warped, blur_size, 0)
-    img_white_warped /= 255
+    # Use HARD mask (no blur/blend) so apply_face_mask() has full control
+    img_white_warped = (img_white_warped > 127).astype(np.float32)
     img_white_warped = img_white_warped[:, :, np.newaxis]
     result = (img_white_warped * bgr_fake_warped + (1 - img_white_warped) * target_img.astype(np.float32)).astype(np.uint8)
     return result
@@ -879,6 +885,11 @@ def operate(
         else:    
             result_image = enhance_image(result_image, enhancement_options)
     elif mask_face and entire_mask_image is not None and swapped > 0:
-        result_image = Image.composite(result_image,Image.fromarray(target_img_orig),Image.fromarray(entire_mask_image).convert("L"))
+        mask_arr = np.array(Image.fromarray(entire_mask_image).convert("L"))
+        blur_k = max(11, int(max(mask_arr.shape) * 0.02))
+        if blur_k % 2 == 0:
+            blur_k += 1
+        mask_arr = cv2.GaussianBlur(mask_arr, (blur_k, blur_k), 0)
+        result_image = Image.composite(result_image,Image.fromarray(target_img_orig),Image.fromarray(mask_arr).convert("L"))
     
     return result_image, output, swapped
