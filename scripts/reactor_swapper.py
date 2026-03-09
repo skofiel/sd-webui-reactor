@@ -751,11 +751,12 @@ def blend_faces(images_list: List, name: str, compute_method: int = 0, shape_che
 
 
 def _paste_back_minimal_erosion(bgr_fake: np.ndarray, M: np.ndarray, target_img: np.ndarray) -> np.ndarray:
-    """Warp the raw swapped face back onto the target image with minimal erosion.
+    """Warp the raw swapped face back onto the target image without erosion.
 
     Unlike INSwapper's internal paste_back which erodes ~10% of mask size
-    (cutting into eyes on angled faces), this uses ~2.5% erosion — just enough
-    to clean warp border artifacts without losing facial features.
+    (cutting into eyes on angled faces), this uses NO erosion — only a light
+    Gaussian blur for anti-aliasing at warp edges. The semantic mask from
+    apply_face_mask() handles all boundary control.
     """
     IM = cv2.invertAffineTransform(M)
     h, w = target_img.shape[:2]
@@ -767,9 +768,7 @@ def _paste_back_minimal_erosion(bgr_fake: np.ndarray, M: np.ndarray, target_img:
     if len(mask_h_inds) == 0:
         return target_img
     mask_size = int(np.sqrt((np.max(mask_h_inds) - np.min(mask_h_inds)) * (np.max(mask_w_inds) - np.min(mask_w_inds))))
-    k = max(mask_size // 40, 3)
-    kernel = np.ones((k, k), np.uint8)
-    img_white_warped = cv2.erode(img_white_warped, kernel, iterations=1)
+    # No erosion — just anti-aliasing blur at warp border edges
     k = max(mask_size // 40, 3)
     blur_size = tuple(2 * i + 1 for i in (k, k))
     img_white_warped = cv2.GaussianBlur(img_white_warped, blur_size, 0)

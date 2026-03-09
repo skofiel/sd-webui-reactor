@@ -379,6 +379,10 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
             ks += 1
         mask = cv2.GaussianBlur(mask, (ks, ks), 0)
 
+        # Re-protect eye regions after blur (blur can reduce eye edge pixels below 127,
+        # which would exclude them from the seamlessClone binary mask)
+        mask = _protect_eye_regions(mask, bisenet_classes, face_size)
+
         # Place mask in full image
         larger_mask = cv2.resize(mask, dsize=(face.width, face.height))
         entire_mask_image[face.top:face.bottom, face.left:face.right] = larger_mask
@@ -392,6 +396,19 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
             try:
                 mask_gray = entire_mask_image if len(entire_mask_image.shape) == 2 else cv2.cvtColor(entire_mask_image, cv2.COLOR_BGR2GRAY)
                 clone_mask = np.where(mask_gray > 127, 255, 0).astype(np.uint8)
+                # Safety net: ensure eye regions are included in clone_mask
+                # (bisenet_classes is at face crop scale, resize to face region in full image)
+                eye_classes_full = np.zeros(clone_mask.shape[:2], dtype=np.uint8)
+                eye_region_small = ((bisenet_classes == 4) | (bisenet_classes == 5)).astype(np.uint8)
+                eye_region_resized = cv2.resize(eye_region_small, dsize=(face.width, face.height), interpolation=cv2.INTER_NEAREST)
+                eye_classes_full[face.top:face.bottom, face.left:face.right] = eye_region_resized
+                if eye_classes_full.any():
+                    eye_dil_k = max(5, int(face_size * 0.04))
+                    if eye_dil_k % 2 == 0:
+                        eye_dil_k += 1
+                    eye_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (eye_dil_k, eye_dil_k))
+                    eye_classes_full = cv2.dilate(eye_classes_full, eye_kernel, iterations=1)
+                    clone_mask[eye_classes_full > 0] = 255
                 bbox = target_face.bbox.astype(int)
                 h, w = target_image.shape[:2]
                 center = (
