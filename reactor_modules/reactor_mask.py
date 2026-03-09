@@ -375,79 +375,37 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
         # Build gradient transition zones at hair, chin, and brow boundaries
         mask = _build_gradient_mask(mask, bisenet_classes, face_size)
 
-        # DEBUG: save gradient mask before blur
-        try:
-            _debug_gradient = cv2.resize(mask if len(mask.shape) == 2 else cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY),
-                                         dsize=(face.width, face.height))
-            _debug_grad_full = np.zeros_like(entire_mask_image)
-            _debug_grad_full[face.top:face.bottom, face.left:face.right] = _debug_gradient
-            cv2.imwrite("/tmp/debug_mask_gradient.png", _debug_grad_full)
-            logger.info("DEBUG: saved /tmp/debug_mask_gradient.png")
-        except Exception as e:
-            logger.warning("DEBUG save gradient failed: %s", e)
-
-        # Apply blur (Gaussian for Extended)
-        ks = params["kernel_size"]
-        if ks % 2 == 0:
-            ks += 1
-        mask = cv2.GaussianBlur(mask, (ks, ks), 0)
-
-        # Re-protect eye regions after blur (blur can reduce eye edge pixels below 127,
-        # which would exclude them from the seamlessClone binary mask)
-        mask = _protect_eye_regions(mask, bisenet_classes, face_size)
-
-        # Place mask in full image
+        # Place mask in full image FIRST, then blur in image space
+        # (blurring in 512px space produces ~3px transition that vanishes after resize to ~100px face)
         larger_mask = cv2.resize(mask, dsize=(face.width, face.height))
         entire_mask_image[face.top:face.bottom, face.left:face.right] = larger_mask
+
+        # Blur in real image space — kernel proportional to actual face size in the image
+        real_face_size = max(face.width, face.height)
+        blur_k = max(5, int(real_face_size * 0.08))
+        if blur_k % 2 == 0:
+            blur_k += 1
+        entire_mask_image = cv2.GaussianBlur(entire_mask_image, (blur_k, blur_k), 0)
+
+        # DEBUG: save gradient mask (before blur) and final mask (after blur)
+        try:
+            _debug_grad_full = np.zeros_like(entire_mask_image)
+            _debug_grad_resized = cv2.resize(mask if len(mask.shape) == 2 else cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY),
+                                              dsize=(face.width, face.height))
+            _debug_grad_full[face.top:face.bottom, face.left:face.right] = _debug_grad_resized
+            cv2.imwrite("/tmp/debug_mask_gradient.png", _debug_grad_full)
+            cv2.imwrite("/tmp/debug_mask_final.png", entire_mask_image)
+            cv2.imwrite("/tmp/debug_swapped.png", swapped_image)
+            cv2.imwrite("/tmp/debug_target.png", target_image)
+            logger.info("DEBUG: saved debug images to /tmp/")
+        except Exception as e:
+            logger.warning("DEBUG save failed: %s", e)
 
         # Color correction
         if params["apply_color"]:
             swapped_image = _color_transfer(swapped_image, target_image, entire_mask_image)
 
-        # DEBUG: save final mask, swapped image, and target image
-        try:
-            cv2.imwrite("/tmp/debug_mask_final.png", entire_mask_image)
-            cv2.imwrite("/tmp/debug_swapped.png", swapped_image)
-            cv2.imwrite("/tmp/debug_target.png", target_image)
-            logger.info("DEBUG: saved /tmp/debug_mask_final.png, debug_swapped.png, debug_target.png")
-        except Exception as e:
-            logger.warning("DEBUG save failed: %s", e)
-
-        # Blending: seamless clone with fallback
-        if params["use_seamless"]:
-            try:
-                mask_gray = entire_mask_image if len(entire_mask_image.shape) == 2 else cv2.cvtColor(entire_mask_image, cv2.COLOR_BGR2GRAY)
-                clone_mask = np.where(mask_gray > 127, 255, 0).astype(np.uint8)
-                # Safety net: ensure eye regions are included in clone_mask
-                # (bisenet_classes is at face crop scale, resize to face region in full image)
-                eye_classes_full = np.zeros(clone_mask.shape[:2], dtype=np.uint8)
-                eye_region_small = ((bisenet_classes == 4) | (bisenet_classes == 5)).astype(np.uint8)
-                eye_region_resized = cv2.resize(eye_region_small, dsize=(face.width, face.height), interpolation=cv2.INTER_NEAREST)
-                eye_classes_full[face.top:face.bottom, face.left:face.right] = eye_region_resized
-                if eye_classes_full.any():
-                    eye_dil_k = max(5, int(face_size * 0.04))
-                    if eye_dil_k % 2 == 0:
-                        eye_dil_k += 1
-                    eye_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (eye_dil_k, eye_dil_k))
-                    eye_classes_full = cv2.dilate(eye_classes_full, eye_kernel, iterations=1)
-                    clone_mask[eye_classes_full > 0] = 255
-                bbox = target_face.bbox.astype(int)
-                h, w = target_image.shape[:2]
-                center = (
-                    int(np.clip((bbox[0] + bbox[2]) // 2, 1, w - 2)),
-                    int(np.clip((bbox[1] + bbox[3]) // 2, 1, h - 2)),
-                )
-                # Check mask doesn't touch image border (seamlessClone fails)
-                if (clone_mask[0, :].any() or clone_mask[-1, :].any() or
-                        clone_mask[:, 0].any() or clone_mask[:, -1].any()):
-                    logger.info("Extended mask - mask touches border, skipping seamlessClone")
-                else:
-                    result = cv2.seamlessClone(swapped_image, target_image, clone_mask, center, cv2.NORMAL_CLONE)
-                    return result
-            except cv2.error as e:
-                logger.warning("seamlessClone failed (%s), falling back to composite", e)
-
-        # Fallback: standard composite
+        # Standard composite with gradient mask
         result = Image.composite(
             Image.fromarray(swapped_image), Image.fromarray(target_image),
             Image.fromarray(entire_mask_image).convert("L"))
@@ -466,29 +424,28 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
         # Build gradient transition zones at hair, chin, and brow boundaries
         mask = _build_gradient_mask(mask, bisenet_classes, face_size)
 
-        # DEBUG: save gradient mask before blur
-        try:
-            _debug_gradient = cv2.resize(mask if len(mask.shape) == 2 else cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY),
-                                         dsize=(face.width, face.height))
-            _debug_grad_full = np.zeros_like(entire_mask_image)
-            _debug_grad_full[face.top:face.bottom, face.left:face.right] = _debug_gradient
-            cv2.imwrite("/tmp/debug_mask_gradient.png", _debug_grad_full)
-            logger.info("DEBUG: saved /tmp/debug_mask_gradient.png (standard mode)")
-        except Exception as e:
-            logger.warning("DEBUG save gradient failed: %s", e)
-
-        kernel_size = max(5, int(face_size * 0.025))
-        mask = cv2.blur(mask, (kernel_size, kernel_size))
-
+        # Place mask in full image FIRST, then blur in image space
         larger_mask = cv2.resize(mask, dsize=(face.width, face.height))
         entire_mask_image[face.top:face.bottom, face.left:face.right] = larger_mask
 
-        # DEBUG: save final mask, swapped image, and target image
+        # Blur in real image space
+        real_face_size = max(face.width, face.height)
+        blur_k = max(5, int(real_face_size * 0.08))
+        if blur_k % 2 == 0:
+            blur_k += 1
+        entire_mask_image = cv2.GaussianBlur(entire_mask_image, (blur_k, blur_k), 0)
+
+        # DEBUG: save debug images
         try:
+            _debug_grad_full = np.zeros(entire_mask_image.shape[:2], dtype=np.uint8)
+            _debug_grad_resized = cv2.resize(mask if len(mask.shape) == 2 else cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY),
+                                              dsize=(face.width, face.height))
+            _debug_grad_full[face.top:face.bottom, face.left:face.right] = _debug_grad_resized
+            cv2.imwrite("/tmp/debug_mask_gradient.png", _debug_grad_full)
             cv2.imwrite("/tmp/debug_mask_final.png", entire_mask_image)
             cv2.imwrite("/tmp/debug_swapped.png", swapped_image)
             cv2.imwrite("/tmp/debug_target.png", target_image)
-            logger.info("DEBUG: saved /tmp/debug_mask_final.png, debug_swapped.png, debug_target.png (standard mode)")
+            logger.info("DEBUG: saved debug images to /tmp/ (standard mode)")
         except Exception as e:
             logger.warning("DEBUG save failed: %s", e)
 
