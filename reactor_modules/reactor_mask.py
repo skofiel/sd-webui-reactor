@@ -134,7 +134,7 @@ def _compute_adaptive_params(scene: dict, edge_contrast: float, face_size: int, 
 
     # Blur kernel: larger when edge contrast is high
     # Reduced from 0.03 since gradient mask handles transition zones
-    base_kernel = max(5, int(face_size * 0.02))
+    base_kernel = max(7, int(face_size * 0.035))
     contrast_boost = int(edge_contrast * 10)
     kernel_size = base_kernel + contrast_boost
     if kernel_size % 2 == 0:
@@ -144,8 +144,10 @@ def _compute_adaptive_params(scene: dict, edge_contrast: float, face_size: int, 
     color_factor = min(1.0, edge_contrast * 3.0)
     apply_color = color_factor > 0.15
 
-    # Seamless clone: use when contrast is noticeable and mask doesn't touch border
-    use_seamless = edge_contrast > 0.08
+    # Seamless clone disabled: it ignores the gradient mask and does its own Poisson
+    # blending, which produces clean cuts at texture discontinuities (eyebrows, eyes).
+    # Standard composite with the gradient mask provides smoother transitions.
+    use_seamless = False
 
     # FaceXFormer extra data adjustments
     if extra_analysis is not None:
@@ -208,9 +210,9 @@ def _build_gradient_mask(binary_mask: np.ndarray, bisenet_classes: np.ndarray, f
     dist_from_face = cv2.distanceTransform(inv_face, cv2.DIST_L2, 5)
 
     # Transition radii proportional to face size
-    hair_radius = max(8, int(face_size * 0.06))
-    chin_radius = max(6, int(face_size * 0.045))
-    brow_radius = max(6, int(face_size * 0.045))
+    hair_radius = max(12, int(face_size * 0.12))
+    chin_radius = max(10, int(face_size * 0.08))
+    brow_radius = max(10, int(face_size * 0.10))
 
     # Semantic regions
     is_hair = (bisenet_classes == 17)
