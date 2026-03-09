@@ -381,6 +381,8 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
         # Place mask in full image FIRST, then blur in image space
         # (blurring in 512px space produces ~3px transition that vanishes after resize to ~100px face)
         larger_mask = cv2.resize(mask, dsize=(face.width, face.height))
+        if len(entire_mask_image.shape) == 3 and len(larger_mask.shape) == 2:
+            larger_mask = cv2.cvtColor(larger_mask, cv2.COLOR_GRAY2BGR)
         entire_mask_image[face.top:face.bottom, face.left:face.right] = larger_mask
 
         # Blur in real image space — kernel proportional to actual face size in the image
@@ -396,6 +398,8 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
             _debug_grad_full = np.zeros_like(entire_mask_image)
             _debug_grad_resized = cv2.resize(mask if len(mask.shape) == 2 else cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY),
                                               dsize=(face.width, face.height))
+            if len(_debug_grad_full.shape) == 3 and len(_debug_grad_resized.shape) == 2:
+                _debug_grad_resized = cv2.cvtColor(_debug_grad_resized, cv2.COLOR_GRAY2BGR)
             _debug_grad_full[face.top:face.bottom, face.left:face.right] = _debug_grad_resized
             cv2.imwrite(os.path.join(_DEBUG_DIR, "debug_mask_gradient.png"), _debug_grad_full)
             cv2.imwrite(os.path.join(_DEBUG_DIR, "debug_mask_final.png"), entire_mask_image)
@@ -430,6 +434,8 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
 
         # Place mask in full image FIRST, then blur in image space
         larger_mask = cv2.resize(mask, dsize=(face.width, face.height))
+        if len(entire_mask_image.shape) == 3 and len(larger_mask.shape) == 2:
+            larger_mask = cv2.cvtColor(larger_mask, cv2.COLOR_GRAY2BGR)
         entire_mask_image[face.top:face.bottom, face.left:face.right] = larger_mask
 
         # Blur in real image space
@@ -445,6 +451,8 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
             _debug_grad_full = np.zeros(entire_mask_image.shape[:2], dtype=np.uint8)
             _debug_grad_resized = cv2.resize(mask if len(mask.shape) == 2 else cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY),
                                               dsize=(face.width, face.height))
+            if len(_debug_grad_full.shape) == 3 and len(_debug_grad_resized.shape) == 2:
+                _debug_grad_resized = cv2.cvtColor(_debug_grad_resized, cv2.COLOR_GRAY2BGR)
             _debug_grad_full[face.top:face.bottom, face.left:face.right] = _debug_grad_resized
             cv2.imwrite(os.path.join(_DEBUG_DIR, "debug_mask_gradient.png"), _debug_grad_full)
             cv2.imwrite(os.path.join(_DEBUG_DIR, "debug_mask_final.png"), entire_mask_image)
