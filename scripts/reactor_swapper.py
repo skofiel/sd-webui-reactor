@@ -262,52 +262,30 @@ def enhance_image_and_mask(image: Image.Image, enhancement_options: EnhancementO
     return result_image
 
     
-def get_gender(face, face_index):
-    gender = [
-        x.sex
-        for x in face
-    ]
-    gender.reverse()
-    try:
-        face_gender = gender[face_index]
-    except IndexError:
-        logger.error("Gender Detection: No face with index = %s was found", face_index)
-        return "None"
-    return face_gender
+GENDER_CONDITION_NAMES = {0: "No", 1: "Female Only", 2: "Male Only"}
 
-def get_face_gender(
-        face,
-        face_index,
-        gender_condition,
-        operated: str,
-        gender_detected,
-):
-    face_gender = gender_detected
-    if face_gender == "None":
-        return None, 0
-    logger.status("%s Face %s: Detected Gender -%s-", operated, face_index, face_gender)
-    if (gender_condition == 1 and face_gender == "F") or (gender_condition == 2 and face_gender == "M"):
-        logger.status("OK - Detected Gender matches Condition")
-        try:
-            return sorted(face, key=lambda x: x.bbox[0])[face_index], 0
-        except IndexError:
-            return None, 0
-    else:
-        logger.status("WRONG - Detected Gender doesn't match Condition")
-        return sorted(face, key=lambda x: x.bbox[0])[face_index], 1
+def sort_faces(faces):
+    # Left-to-right, the ordering face indexes have always referred to
+    return sorted(faces, key=lambda x: x.bbox[0])
 
-def get_face_age(face, face_index):
-    age = [
-        x.age
-        for x in face
-    ]
-    age.reverse()
-    try:
-        face_age = age[face_index]
-    except IndexError:
-        logger.error("Age Detection: No face with index = %s was found", face_index)
-        return "None"
-    return face_age
+def filter_faces_by_gender(faces, gender_condition):
+    # 0 = don't filter, 1 = Female Only, 2 = Male Only
+    if gender_condition == 0 or not faces:
+        return faces
+    want = "F" if gender_condition == 1 else "M"
+    return [f for f in faces if getattr(f, "sex", None) == want]
+
+def log_detected_faces(faces, operated: str):
+    # genderage.onnx is unreliable on stylized SDXL/Pony faces, so always dump
+    # what the detector actually returned before any filtering is applied
+    logger.status("%s: %s face(s) detected (sorted left-to-right)", operated, len(faces))
+    for i, f in enumerate(faces):
+        bbox = getattr(f, "bbox", None)
+        bbox_str = "None" if bbox is None else ",".join(str(int(v)) for v in bbox)
+        logger.status(
+            "%s: Face %s - sex=%s age=%s bbox=[%s]",
+            operated, i, getattr(f, "sex", None), getattr(f, "age", None), bbox_str
+        )
 
 def half_det_size(det_size):
     logger.status("Trying to halve 'det_size' parameter")
@@ -326,48 +304,56 @@ def analyze_faces(img_data: np.ndarray, det_size=(640, 640), det_thresh=0.5, det
     face_analyser.prepare(ctx_id=0, det_thresh=det_thresh, det_size=det_size)
     return face_analyser.get(img_data, max_num=det_maxnum)
 
-def get_face_single(img_data: np.ndarray, face, face_index=0, det_size=(640, 640), gender_source=0, gender_target=0, det_thresh=0.5, det_maxnum=0):
+def get_face_single(img_data: np.ndarray, face, face_index=0, det_size=(640, 640), gender_source=0, gender_target=0, det_thresh=0.5, det_maxnum=0, operated: str = "Face"):
 
     buffalo_path = os.path.join(models_path, "insightface/models/buffalo_l.zip")
     if os.path.exists(buffalo_path):
         os.remove(buffalo_path)
 
-    face_age = "None"
-    try:
-        face_age = get_face_age(face, face_index)
-    except (IndexError, AttributeError):
-        logger.error("Cannot detect any Age for Face index = %s", face_index)
-    
-    face_gender = "None"
-    try:
-        face_gender = get_gender(face, face_index)
-        gender_detected = face_gender
-        face_gender = "Female" if face_gender == "F" else ("Male" if face_gender == "M" else "None")
-    except (IndexError, AttributeError):
-        logger.error("Cannot detect any Gender for Face index = %s", face_index)
-    
-    if gender_source != 0:
-        if len(face) == 0 and det_size[0] > 320 and det_size[1] > 320:
-            det_size_half = half_det_size(det_size)
-            return get_face_single(img_data, analyze_faces(img_data, det_size_half, det_thresh, det_maxnum), face_index, det_size_half, gender_source, gender_target, det_thresh, det_maxnum)
-        faces, wrong_gender = get_face_gender(face,face_index,gender_source,"Source",gender_detected)
-        return faces, wrong_gender, face_age, face_gender
-
-    if gender_target != 0:
-        if len(face) == 0 and det_size[0] > 320 and det_size[1] > 320:
-            det_size_half = half_det_size(det_size)
-            return get_face_single(img_data, analyze_faces(img_data, det_size_half, det_thresh, det_maxnum), face_index, det_size_half, gender_source, gender_target, det_thresh, det_maxnum)
-        faces, wrong_gender = get_face_gender(face,face_index,gender_target,"Target",gender_detected)
-        return faces, wrong_gender, face_age, face_gender
-    
     if len(face) == 0 and det_size[0] > 320 and det_size[1] > 320:
         det_size_half = half_det_size(det_size)
-        return get_face_single(img_data, analyze_faces(img_data, det_size_half, det_thresh, det_maxnum), face_index, det_size_half, gender_source, gender_target, det_thresh, det_maxnum)
+        return get_face_single(img_data, analyze_faces(img_data, det_size_half, det_thresh, det_maxnum), face_index, det_size_half, gender_source, gender_target, det_thresh, det_maxnum, operated)
 
-    try:
-        return sorted(face, key=lambda x: x.bbox[0])[face_index], 0, face_age, face_gender
-    except IndexError:
-        return None, 0, face_age, face_gender
+    gender_condition = gender_source if gender_source != 0 else gender_target
+
+    # Order first, then filter by gender, then index: the face index refers to
+    # the filtered list, so faces of the other gender are ignored entirely
+    faces_sorted = sort_faces(face)
+    log_detected_faces(faces_sorted, operated)
+    faces_filtered = filter_faces_by_gender(faces_sorted, gender_condition)
+
+    if gender_condition != 0:
+        logger.status(
+            "%s: Gender filter -%s- kept %s of %s face(s)",
+            operated, GENDER_CONDITION_NAMES.get(gender_condition, gender_condition),
+            len(faces_filtered), len(faces_sorted)
+        )
+
+    if len(faces_filtered) == 0:
+        if gender_condition != 0:
+            logger.status("%s: No face matches the Gender filter - nothing to swap", operated)
+        return None, 0, "None", "None"
+
+    if face_index < 0 or face_index >= len(faces_filtered):
+        logger.status(
+            "%s: Face index %s is out of range - %s face(s) after filtering",
+            operated, face_index, len(faces_filtered)
+        )
+        return None, 0, "None", "None"
+
+    selected_face = faces_filtered[face_index]
+
+    face_age = getattr(selected_face, "age", None)
+    if face_age is None:
+        face_age = "None"
+        logger.error("Cannot detect any Age for Face index = %s", face_index)
+
+    sex = getattr(selected_face, "sex", None)
+    face_gender = "Female" if sex == "F" else ("Male" if sex == "M" else "None")
+    if face_gender == "None":
+        logger.error("Cannot detect any Gender for Face index = %s", face_index)
+
+    return selected_face, 0, face_age, face_gender
 
 
 def swap_face(
@@ -535,7 +521,7 @@ def _swap_face_impl(
                 for i,source_faces in enumerate(source_faces_ff):
 
                     logger.status("(Image %s) Detecting Source Face, Index = %s", i, source_faces_index[0])
-                    source_face, wrong_gender, source_age, source_gender = get_face_single(source_img_ff[i], source_faces, face_index=source_faces_index[0], gender_source=gender_source, det_thresh=detection_options.det_thresh, det_maxnum=detection_options.det_maxnum)
+                    source_face, wrong_gender, source_age, source_gender = get_face_single(source_img_ff[i], source_faces, face_index=source_faces_index[0], gender_source=gender_source, det_thresh=detection_options.det_thresh, det_maxnum=detection_options.det_maxnum, operated="Source")
                     
                     if source_age != "None" or source_gender != "None":
                         logger.status("(Image %s) Detected: -%s- y.o. %s", i, source_age, source_gender)
@@ -636,7 +622,7 @@ def _swap_face_impl(
 
                 logger.status("Detecting Source Face, Index = %s", source_faces_index[0])
                 if select_source == 0 and source_img is not None:
-                    source_face, wrong_gender, source_age, source_gender = get_face_single(source_img, source_faces, face_index=source_faces_index[0], gender_source=gender_source, det_thresh=detection_options.det_thresh, det_maxnum=detection_options.det_maxnum)
+                    source_face, wrong_gender, source_age, source_gender = get_face_single(source_img, source_faces, face_index=source_faces_index[0], gender_source=gender_source, det_thresh=detection_options.det_thresh, det_maxnum=detection_options.det_maxnum, operated="Source")
                 else:
                     source_face = sorted(source_faces, key=lambda x: x.bbox[0])[source_faces_index[0]]
                     wrong_gender = 0
@@ -821,7 +807,7 @@ def operate(
             return result_image, [], 0
         if len(source_faces_index) > 1 and source_face_idx > 0:
             logger.status("Detecting Source Face, Index = %s", source_faces_index[source_face_idx])
-            source_face, wrong_gender, source_age, source_gender = get_face_single(source_img, source_faces, face_index=source_faces_index[source_face_idx], gender_source=gender_source, det_thresh=detection_options.det_thresh, det_maxnum=detection_options.det_maxnum)
+            source_face, wrong_gender, source_age, source_gender = get_face_single(source_img, source_faces, face_index=source_faces_index[source_face_idx], gender_source=gender_source, det_thresh=detection_options.det_thresh, det_maxnum=detection_options.det_maxnum, operated="Source")
             if source_age != "None" or source_gender != "None":
                 logger.status("Detected: -%s- y.o. %s", source_age, source_gender)
 
@@ -832,7 +818,7 @@ def operate(
 
         if source_face is not None and wrong_gender == 0:
             logger.status("Detecting Target Face, Index = %s", face_num)
-            target_face, wrong_gender, target_age, target_gender = get_face_single(target_img, target_faces, face_index=face_num, gender_target=gender_target, det_thresh=detection_options.det_thresh, det_maxnum=detection_options.det_maxnum)
+            target_face, wrong_gender, target_age, target_gender = get_face_single(target_img, target_faces, face_index=face_num, gender_target=gender_target, det_thresh=detection_options.det_thresh, det_maxnum=detection_options.det_maxnum, operated="Target")
             if target_age != "None" or target_gender != "None":
                 logger.status("Detected: -%s- y.o. %s", target_age, target_gender)
 
