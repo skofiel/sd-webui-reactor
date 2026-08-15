@@ -213,12 +213,10 @@ def _build_gradient_mask(binary_mask: np.ndarray, bisenet_classes: np.ndarray, f
     dist_from_face = cv2.distanceTransform(inv_face, cv2.DIST_L2, 5)
 
     # Transition radii proportional to face size
-    hair_radius = max(12, int(face_size * 0.12))
     chin_radius = max(10, int(face_size * 0.08))
     brow_radius = max(10, int(face_size * 0.10))
 
     # Semantic regions
-    is_hair = (bisenet_classes == 17)
     is_neck = (bisenet_classes == 14)
     is_background = (bisenet_classes == 0)
 
@@ -232,12 +230,6 @@ def _build_gradient_mask(binary_mask: np.ndarray, bisenet_classes: np.ndarray, f
     row_indices = np.arange(mask_gray.shape[0])[:, np.newaxis]
     row_indices = np.broadcast_to(row_indices, mask_gray.shape[:2])
 
-    # Hairline transition: hair pixels near face edge
-    hair_zone = is_hair & (dist_from_face > 0) & (dist_from_face < hair_radius)
-    hair_alpha = np.zeros_like(mask_gray, dtype=np.float32)
-    if hair_zone.any():
-        hair_alpha[hair_zone] = 1.0 - (dist_from_face[hair_zone] / hair_radius)
-
     # Chin/jaw transition: neck or background below centroid, near face edge
     below_centroid = (row_indices > face_centroid_y)
     chin_candidates = (is_neck | (is_background & below_centroid))
@@ -246,9 +238,10 @@ def _build_gradient_mask(binary_mask: np.ndarray, bisenet_classes: np.ndarray, f
     if chin_zone.any():
         chin_alpha[chin_zone] = 1.0 - (dist_from_face[chin_zone] / chin_radius)
 
-    # Eyebrow top transition: background or hair above centroid, near face edge
+    # Eyebrow top transition: background above centroid, near face edge
+    # (Hair is excluded — no transition into hair to preserve original hair quality)
     above_centroid = (row_indices < face_centroid_y)
-    brow_candidates = ((is_background | is_hair) & above_centroid)
+    brow_candidates = (is_background & above_centroid)
     brow_zone = brow_candidates & (dist_from_face > 0) & (dist_from_face < brow_radius)
     brow_alpha = np.zeros_like(mask_gray, dtype=np.float32)
     if brow_zone.any():
@@ -256,7 +249,6 @@ def _build_gradient_mask(binary_mask: np.ndarray, bisenet_classes: np.ndarray, f
 
     # Combine: face interior at full opacity, transitions add gradient outward
     combined = mask_gray.astype(np.float32) / 255.0
-    combined = np.maximum(combined, hair_alpha)
     combined = np.maximum(combined, chin_alpha)
     combined = np.maximum(combined, brow_alpha)
 
@@ -375,7 +367,7 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
         # Protect eye regions from being split by erosion or gradient
         mask = _protect_eye_regions(mask, bisenet_classes, face_size)
 
-        # Build gradient transition zones at hair, chin, and brow boundaries
+        # Build gradient transition zones at chin and brow boundaries (hair excluded)
         mask = _build_gradient_mask(mask, bisenet_classes, face_size)
 
         # Place mask in full image FIRST, then blur in image space
@@ -429,7 +421,7 @@ def apply_face_mask(swapped_image:np.ndarray,target_image:np.ndarray,target_face
         # Protect eye regions from being split by gradient or blur
         mask = _protect_eye_regions(mask, bisenet_classes, face_size)
 
-        # Build gradient transition zones at hair, chin, and brow boundaries
+        # Build gradient transition zones at chin and brow boundaries (hair excluded)
         mask = _build_gradient_mask(mask, bisenet_classes, face_size)
 
         # Place mask in full image FIRST, then blur in image space
