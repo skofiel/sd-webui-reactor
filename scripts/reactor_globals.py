@@ -40,3 +40,13 @@ def updateDevice():
     return device
 
 DEVICE = updateDevice()
+
+# onnxruntime >= 1.21 resuelve las librerias CUDA/cuDNN desde los site-packages
+# de NVIDIA. Sin esto cae a CPU: las .so viven en venv/.../nvidia/*/lib y no en
+# rutas del sistema. Defensivo: en versiones antiguas la funcion no existe.
+try:
+    import onnxruntime as _ort
+    if hasattr(_ort, "preload_dlls"):
+        _ort.preload_dlls()
+except Exception as _e:
+    print(f"[ReActor-X] preload_dlls no aplicado: {_e}")
