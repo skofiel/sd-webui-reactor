@@ -108,7 +108,7 @@ with open(req_file) as file:
                 extra_index_url = "https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/"
             else: # CU11.8
                 extra_index_url = "https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-11/pypi/simple"
-            if not is_installed(ort,"1.17.1",True):
+            if not is_installed(ort,"1.17.1",False):
                 install_count += 1
                 ort = "onnxruntime-gpu==1.17.1"
                 pip_uninstall("onnxruntime", "onnxruntime-gpu")
