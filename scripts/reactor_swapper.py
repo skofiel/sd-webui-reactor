@@ -300,7 +300,7 @@ def analyze_faces(img_data: np.ndarray, det_size=(640, 640), det_thresh=0.5, det
             det_size = (1280, 1280)
         elif img_max > 1280:
             det_size = (960, 960)
-    face_analyser = copy.deepcopy(getAnalysisModel())
+    face_analyser = getAnalysisModel()
     face_analyser.prepare(ctx_id=0, det_thresh=det_thresh, det_size=det_size)
     return face_analyser.get(img_data, max_num=det_maxnum)
 

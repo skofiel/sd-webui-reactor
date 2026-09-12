@@ -104,7 +104,7 @@ def patched_get_default_providers():
 def patch_insightface(get_default_providers, get_model, faceanalysis_init, faceanalysis_prepare, inswapper_init):
     insightface.model_zoo.model_zoo.get_default_providers = get_default_providers
     insightface.model_zoo.model_zoo.ModelRouter.get_model = get_model
-    insightface.app.FaceAnalysis.__init__ = faceanalysis_init
+    # insightface.app.FaceAnalysis.__init__ = faceanalysis_init  # incompat insightface 2.0
     insightface.app.FaceAnalysis.prepare = faceanalysis_prepare
     insightface.model_zoo.inswapper.INSwapper.__init__ = inswapper_init
 
